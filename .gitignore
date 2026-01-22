@@ -1,0 +1,6 @@
+.venv
+*.npz
+beat_this_annotations-1.0
+annotations
+.DS_Store
+cue_point.json
