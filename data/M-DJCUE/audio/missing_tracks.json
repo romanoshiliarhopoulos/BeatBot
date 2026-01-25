@@ -1,0 +1,471 @@
+[
+  {
+    "artist": "Fingers Inc",
+    "title": "Can You Feel It (Instrumental)",
+    "url": "https://www.youtube.com/watch?v=-gpuXqevQOU",
+    "reason": "download_failed",
+    "error": "ERROR: [youtube] -gpuXqevQOU: Video unavailable"
+  },
+  {
+    "artist": "Karizma",
+    "title": "Tech This Out (Kaytronik Dub)",
+    "url": "https://www.youtube.com/watch?v=tP_R2IdqoB8",
+    "reason": "download_failed",
+    "error": "ERROR: [youtube] tP_R2IdqoB8: Video unavailable. This video is not available"
+  },
+  {
+    "artist": "Colonel Abrams",
+    "title": "Victim Of Loving You (Vocal Club Mix)",
+    "url": "https://www.youtube.com/watch?v=UUWbLuaRe9A",
+    "reason": "download_failed",
+    "error": "ERROR: [youtube] UUWbLuaRe9A: Video unavailable. This video is not available"
+  },
+  {
+    "artist": "Celetia",
+    "title": "Rewind (Ignorants Remix)",
+    "url": "https://www.youtube.com/watch?v=t-9oQPPdVKA",
+    "reason": "download_failed",
+    "error": "ERROR: [youtube] t-9oQPPdVKA: Video unavailable"
+  },
+  {
+    "artist": "Nic Fanciulli",
+    "title": "Lucky Heather (Dubfire's Lucky 13 Remix",
+    "url": "https://www.youtube.com/watch?v=JX1BvUXupdc",
+    "reason": "download_failed",
+    "error": "ERROR: [youtube] JX1BvUXupdc: Video unavailable. This video is no longer available because the YouTube account associated with this video has been terminated."
+  },
+  {
+    "artist": "Peven Everett",
+    "title": "I Can't Believe I Loved Her (Main Mix)",
+    "url": "https://www.youtube.com/watch?v=5DtnLLbHnNw",
+    "reason": "download_failed",
+    "error": "ERROR: [youtube] 5DtnLLbHnNw: Video unavailable. This video is not available"
+  },
+  {
+    "artist": "Joint Venture",
+    "title": "Master Blaster (Turn It Up) (Tha Wild Pitch mix)",
+    "url": "https://www.youtube.com/watch?v=GPkiGnPIfLw",
+    "reason": "download_failed",
+    "error": "ERROR: [youtube] GPkiGnPIfLw: Video unavailable. This video is not available"
+  },
+  {
+    "artist": "River Ocean ft India",
+    "title": "Conga Drums",
+    "url": "https://www.youtube.com/watch?v=L6iqksHMrSM",
+    "reason": "download_failed",
+    "error": "ERROR: [youtube] L6iqksHMrSM: Video unavailable"
+  },
+  {
+    "artist": "Future Sound Of London",
+    "title": "Papua New Guinea (Dali Mix)",
+    "url": "https://www.youtube.com/watch?v=Oyg8LFKI0KQ",
+    "reason": "download_failed",
+    "error": "ERROR: [youtube] Oyg8LFKI0KQ: Video unavailable. This video has been removed by the uploader"
+  },
+  {
+    "artist": "Detlef",
+    "title": "Kinky Tail",
+    "url": "https://www.youtube.com/watch?v=zwOmaF3ZRdQ",
+    "reason": "download_failed",
+    "error": "ERROR: [youtube] zwOmaF3ZRdQ: Video unavailable"
+  },
+  {
+    "artist": "Degrees Of Motion",
+    "title": "Do You Want It Right Now (Extended Club Mix)",
+    "url": "https://www.youtube.com/watch?v=mod5DGp4CDo",
+    "reason": "download_failed",
+    "error": "ERROR: [youtube] mod5DGp4CDo: Video unavailable. This video is no longer available because the YouTube account associated with this video has been terminated."
+  },
+  {
+    "artist": "Sonique",
+    "title": "Feels So Good (En-Motion Remix)",
+    "url": "https://www.youtube.com/watch?v=b58-_6jU5qQ",
+    "reason": "download_failed",
+    "error": "ERROR: [youtube] b58-_6jU5qQ: Video unavailable"
+  },
+  {
+    "artist": "Mone'",
+    "title": "We Can Make It (Joe T Vannelli Dub)",
+    "url": "https://www.youtube.com/watch?v=cN1WyriwhEg",
+    "reason": "download_failed",
+    "error": "ERROR: [youtube] cN1WyriwhEg: Video unavailable. This video is not available"
+  },
+  {
+    "artist": "Donna Summer",
+    "title": "State of Independence (Murk Club Mix)",
+    "url": "https://www.youtube.com/watch?v=vMB5DRJYWEI",
+    "reason": "download_failed",
+    "error": "ERROR: [youtube] vMB5DRJYWEI: Video unavailable. This video is no longer available because the YouTube account associated with this video has been terminated."
+  },
+  {
+    "artist": "Butch Hohberg",
+    "title": "Peyote",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Danny Tenaglia",
+    "title": "Dibiza (Zoltan Kontes Jerome Robins Mix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "BeBe Winans",
+    "title": "Thank You (KenLou Horn Mix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "D.Funk Era",
+    "title": "\u200eSpring",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Backroom Productions",
+    "title": "Trouble (Dub Version 3)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Bent",
+    "title": "Always (Mighty Mouse Remix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Carolyn Harding & Damon Horton",
+    "title": "Sing A Song (MAW's Instrumental)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Underworld",
+    "title": "Beautiful Burnout",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Frankie Knuckles ft Adeva",
+    "title": "Too Many Fish (Morales' D-Bert Mix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Urban Blues Project pres. Michael Procter",
+    "title": "Love Don't Live (U.B.P. Classic Mix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "James Howard",
+    "title": "We Can Do It (Wake Up)(The Wake Up Mix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Dusty Kid",
+    "title": "Singal'63",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Nalin & Kane",
+    "title": "Beachball (Extended Version)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Black Coffee ft Thiwe",
+    "title": "Crazy (Manoo & Francois A Deep Journey Mix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "U2",
+    "title": "Lemon (Momo Beats)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Armand Van Helden",
+    "title": "The Funk Phenomena",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Mike Delgado",
+    "title": "Byrdman's Revenge (Original Mix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "MCJ ft Davina",
+    "title": "I'm Ready (For Your Love) (The Get Ready mix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Deepswing",
+    "title": "In The Music (Original Version)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Mang'e Le Funk",
+    "title": "I Still Want You",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Max Berlin & Cicada",
+    "title": "Elle Et Moi",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Bob Sinclair",
+    "title": "Vision of Paradise",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Harry Romero ft Robert Owens",
+    "title": "I Go Back",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Caucasian Boy",
+    "title": "Northern Lights (Old Skool Re-edit)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Voices",
+    "title": "Voices In My Mind (MAW Mix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Urban Blues Project pres. Michael Procter",
+    "title": "Love Don't Live (New Birth (Mix) UK Re-Edit)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "India",
+    "title": "La India Con Lavoe (Remixed by MAW)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "808 State",
+    "title": "Pacific (Original 12-inch Mix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Fingers Inc",
+    "title": "Can You Feel It (Original Mix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "C.J. Bolland",
+    "title": "Sugar Is Sweeter (Armand's Drum 'n' Bass Mix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Liberty City",
+    "title": "Some Lovin (Original Mix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Alistair Colling",
+    "title": "Cafe Sol (Para Carolina) (Original)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Black Science Orchestra",
+    "title": "Keep On Keepin' On (Spen & Karisma's Deepah Dub)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Gerideau",
+    "title": "Take A Stand (Original",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Danny Tenaglia",
+    "title": "Elements (Original Mix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "32 Project",
+    "title": "Rule Of Humanity (Bonus Beats)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Jose Nunez",
+    "title": "Bilingual (Dirty Mix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Cheek",
+    "title": "Venus (Sunshine People Remix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Andy Ash",
+    "title": "Hip Joint (Deep Space Orchestra Mix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Paperclip People",
+    "title": "Remake Uno",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Incognito",
+    "title": "Always There",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Barbara Tucker",
+    "title": "Stay Together (Armand's Crazy Trauma Mix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Danny Tenaglia",
+    "title": "The Better Days",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "LFO",
+    "title": "LFO",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Rachid",
+    "title": "Pride (Dobie's It's A Thing Mix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Fonda Rae",
+    "title": "Living In Ecstasy (I Like What You Do) (The Groove Mix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Karen Pollack",
+    "title": "You Cant Touch Me You Cant Hurt Me (Murk Remix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "House Of Gypsies",
+    "title": "Samba (Tee's Freeze Mix)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Frankie Knuckles ft Adeva",
+    "title": "Too Many Fish (Classic Frankie Version)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Don Carlos",
+    "title": "Alone (Saxambient)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Photon Inc. & Paula Brion",
+    "title": "Generate Power (Wild Pitch Mix",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Apparat",
+    "title": "Fractales (Apparat's Ibiza Mix",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  },
+  {
+    "artist": "Satoshi Tomiie",
+    "title": "Tears (Full Intention's Drippin' 'n' Droppin' Dub)",
+    "url": null,
+    "reason": "no_youtube_mirror",
+    "error": ""
+  }
+]

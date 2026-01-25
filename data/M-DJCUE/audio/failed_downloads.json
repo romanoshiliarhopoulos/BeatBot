@@ -1,0 +1,86 @@
+[
+  {
+    "artist": "Fingers Inc",
+    "title": "Can You Feel It (Instrumental)",
+    "url": "https://www.youtube.com/watch?v=-gpuXqevQOU",
+    "error": "ERROR: [youtube] -gpuXqevQOU: Video unavailable"
+  },
+  {
+    "artist": "Karizma",
+    "title": "Tech This Out (Kaytronik Dub)",
+    "url": "https://www.youtube.com/watch?v=tP_R2IdqoB8",
+    "error": "ERROR: [youtube] tP_R2IdqoB8: Video unavailable. This video is not available"
+  },
+  {
+    "artist": "Colonel Abrams",
+    "title": "Victim Of Loving You (Vocal Club Mix)",
+    "url": "https://www.youtube.com/watch?v=UUWbLuaRe9A",
+    "error": "ERROR: [youtube] UUWbLuaRe9A: Video unavailable. This video is not available"
+  },
+  {
+    "artist": "Celetia",
+    "title": "Rewind (Ignorants Remix)",
+    "url": "https://www.youtube.com/watch?v=t-9oQPPdVKA",
+    "error": "ERROR: [youtube] t-9oQPPdVKA: Video unavailable"
+  },
+  {
+    "artist": "Nic Fanciulli",
+    "title": "Lucky Heather (Dubfire's Lucky 13 Remix",
+    "url": "https://www.youtube.com/watch?v=JX1BvUXupdc",
+    "error": "ERROR: [youtube] JX1BvUXupdc: Video unavailable. This video is no longer available because the YouTube account associated with this video has been terminated."
+  },
+  {
+    "artist": "Peven Everett",
+    "title": "I Can't Believe I Loved Her (Main Mix)",
+    "url": "https://www.youtube.com/watch?v=5DtnLLbHnNw",
+    "error": "ERROR: [youtube] 5DtnLLbHnNw: Video unavailable. This video is not available"
+  },
+  {
+    "artist": "Joint Venture",
+    "title": "Master Blaster (Turn It Up) (Tha Wild Pitch mix)",
+    "url": "https://www.youtube.com/watch?v=GPkiGnPIfLw",
+    "error": "ERROR: [youtube] GPkiGnPIfLw: Video unavailable. This video is not available"
+  },
+  {
+    "artist": "River Ocean ft India",
+    "title": "Conga Drums",
+    "url": "https://www.youtube.com/watch?v=L6iqksHMrSM",
+    "error": "ERROR: [youtube] L6iqksHMrSM: Video unavailable"
+  },
+  {
+    "artist": "Future Sound Of London",
+    "title": "Papua New Guinea (Dali Mix)",
+    "url": "https://www.youtube.com/watch?v=Oyg8LFKI0KQ",
+    "error": "ERROR: [youtube] Oyg8LFKI0KQ: Video unavailable. This video has been removed by the uploader"
+  },
+  {
+    "artist": "Detlef",
+    "title": "Kinky Tail",
+    "url": "https://www.youtube.com/watch?v=zwOmaF3ZRdQ",
+    "error": "ERROR: [youtube] zwOmaF3ZRdQ: Video unavailable"
+  },
+  {
+    "artist": "Degrees Of Motion",
+    "title": "Do You Want It Right Now (Extended Club Mix)",
+    "url": "https://www.youtube.com/watch?v=mod5DGp4CDo",
+    "error": "ERROR: [youtube] mod5DGp4CDo: Video unavailable. This video is no longer available because the YouTube account associated with this video has been terminated."
+  },
+  {
+    "artist": "Sonique",
+    "title": "Feels So Good (En-Motion Remix)",
+    "url": "https://www.youtube.com/watch?v=b58-_6jU5qQ",
+    "error": "ERROR: [youtube] b58-_6jU5qQ: Video unavailable"
+  },
+  {
+    "artist": "Mone'",
+    "title": "We Can Make It (Joe T Vannelli Dub)",
+    "url": "https://www.youtube.com/watch?v=cN1WyriwhEg",
+    "error": "ERROR: [youtube] cN1WyriwhEg: Video unavailable. This video is not available"
+  },
+  {
+    "artist": "Donna Summer",
+    "title": "State of Independence (Murk Club Mix)",
+    "url": "https://www.youtube.com/watch?v=vMB5DRJYWEI",
+    "error": "ERROR: [youtube] vMB5DRJYWEI: Video unavailable. This video is no longer available because the YouTube account associated with this video has been terminated."
+  }
+]
