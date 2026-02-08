@@ -5,12 +5,12 @@ from pathlib import Path
 @dataclass
 class Track:
     """
-    Unified track representation for M-DJCUE, Beat This, and local audio.
+    Unified track representation for M-DJCUE, Beat This, and local audio. With from hand annotations.
     """
 
     # Metadata 
     track_id: str
-    source: str             # "m_djcue" or "beat_this" or "local"
+    source: str             # "m_djcue"/ "beat_this" / "local"
     audio_path: Path | None
     duration: float         # Total track length in seconds
 

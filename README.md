@@ -15,4 +15,4 @@ Ideally the model will classify the following:
 - The "best" exit cue, along with 2 other alternatives. (Unless alternatives are chosen, mix happens at "best").
 - If user triggers, finds the optimal exit cue within the next 10-15s of current track. (Next entry already computed at this point.)
 
-Idea: Also have a parameter later on on choosing how long we want the songs to stay (short, med, long) for distance between entry cue and exit cue.
+Idea: Also have a parameter later on on choosing how long we want the songs to stay (short, med, long) for distance between entry cue and exit cue..
