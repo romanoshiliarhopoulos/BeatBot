@@ -27,3 +27,9 @@ The task will be framed as a **ranking problem**.
 *   The model will first identify all potential cue points (e.g., the start of every bar).
 *   It will then learn to assign a "goodness" score to each of these candidates for both entry and exit.
 *   Finally, the top 3 scoring candidates for "IN" and "OUT" will be selected as the predicted cue points.
+
+### 4. Evaluation Strategy
+To account for the subjective nature of mixing and musical phrasing, the model will be evaluated using "Soft Evaluation" metrics rather than strict binary accuracy:
+*   **Tolerance Window:** Predictions within a small window (e.g., ±1 bar) of the ground truth are penalized less, accounting for minor timing offsets or "lead-in" preferences.
+*   **Phrase-Aware Scoring:** Predictions that are structurally consonant (e.g., exactly 16 or 32 bars away from the ground truth) receive partial credit. This rewards the model for identifying valid "musical alternatives" even if they differ from the specific annotator's choice.
+*   **Ranking Metrics:** Metrics like **NDCG (Normalized Discounted Cumulative Gain)** or **Soft Precision@K** will be used to evaluate the quality of the top-ranked candidates, ensuring that good mixing points appear early in the suggestion list.
