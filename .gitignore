@@ -6,3 +6,4 @@ annotations
 cue_point.json
 *.mp3
 custom
+__pycache__

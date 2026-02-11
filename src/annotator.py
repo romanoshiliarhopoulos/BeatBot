@@ -220,22 +220,3 @@ class AnnotatorTool:
             self.load_track(self.current_index)
         else:
             print("End of list.")
-
-# -- Direct Run Support --
-if __name__ == "__main__":
-    # Check if we are running in a notebook-like environment or interactive mode
-    # If standard terminal, warn user.
-    try:
-        get_ipython()
-        print("Loading Annotation Tool...")
-        # Assume standard relative paths based on where file is located in src/
-        # Adjust if necessary
-        app = AnnotatorTool() 
-        display(app.ui)
-    except NameError:
-        print("----------------------------------------------------------------")
-        print("NOTICE: This tool cannot run in a standard terminal.")
-        print("It requires a Jupyter environment to render the buttons and audio player.")
-        print("")
-        print("Please open 'src/playground_custom.ipynb' and run the tool there.")
-        print("----------------------------------------------------------------")
