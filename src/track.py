@@ -28,8 +28,39 @@ class Track:
     energy_per_bar: np.ndarray | None = None # shape (M,), Global Energy
     low_band_energy: np.ndarray | None = None # shape (M,), <250Hz energy, Bass Energy (tracks Kick Drum)
     vocal_mask: np.ndarray | None = None # shape (M,), dtype=bool - True if vocals active in this bar
+    
+    # Enhanced Energy Features 
+    energy_derivative: np.ndarray | None = None # shape (M,), ΔE between bars (detects builds/drops)
+    energy_volatility: np.ndarray | None = None # shape (M,), Rolling std of energy (stability)
+    high_band_energy: np.ndarray | None = None # shape (M,), >4kHz energy (hi-hats, cymbals)
+    mid_band_energy: np.ndarray | None = None # shape (M,), 250-4kHz (melodic content)
+    rms_energy: np.ndarray | None = None # shape (M,), Root-mean-square energy per bar
+    
+    # Beat & Rhythm Quality
+    beat_strength: np.ndarray | None = None # shape (M,), Average onset strength per bar
+    beat_consistency: np.ndarray | None = None # shape (M,), Regularity of kick drum pattern
+    syncopation: np.ndarray | None = None # shape (M,), Off-beat emphasis (0=straight, 1=syncopated)
+    percussion_intensity: np.ndarray | None = None # shape (M,), Isolated percussion loudness
+    
+    # Harmonic & Timbral Features
+    spectral_centroid: np.ndarray | None = None # shape (M,), Brightness of sound
+    spectral_flatness: np.ndarray | None = None # shape (M,), Noisiness (0=tonal, 1=noisy)
+    spectral_rolloff: np.ndarray | None = None # shape (M,), Frequency below which 85% energy lies
+    harmonic_ratio: np.ndarray | None = None # shape (M,), Harmonic vs percussive balance
+    chroma_vector: np.ndarray | None = None # shape (M, 12), Pitch class distribution per bar
+    
+    # Structural & Positional Features
+    bar_position_normalized: np.ndarray | None = None # shape (M,), Bar index / total_bars (0.0-1.0)
+    distance_to_section_boundary: np.ndarray | None = None # shape (M,), Bars until next section change
+    is_section_start: np.ndarray | None = None # shape (M,), Boolean flag
+    phrase_position: np.ndarray | None = None # shape (M,), Position within 16-bar phrase (0-15)
+    
+    # Vocal & Melodic Activity
+    vocal_activity_confidence: np.ndarray | None = None # shape (M,), 0.0-1.0 from source separation
+    melodic_complexity: np.ndarray | None = None # shape (M,), Number of active harmonic peaks
+    vocal_onset_likelihood: np.ndarray | None = None # shape (M,), Predicts if vocals start in next 4 bars
 
-    # Harmonic Key (For Cameolot Mixing). Store as index (0-11 for C->B) and scale (0=minor, 1=major)
+    # Harmonic Key (For Camelot Mixing). Store as index (0-11 for C->B) and scale (0=minor, 1=major)
     key_tonic: int | None = None # 0-11
     key_scale: str | None = None # "minor" or "major"
     key_confidence: float | None = None # 0.0-1.0, confidence in key detection

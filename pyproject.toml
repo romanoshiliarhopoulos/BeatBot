@@ -13,7 +13,8 @@ dependencies = [
     "youtube-search-python (>=1.6.6,<2.0.0)",
     "pandas (>=3.0.0,<4.0.0)",
     "librosa (>=0.11.0,<0.12.0)",
-    "ipywidgets (>=8.1.8,<9.0.0)"
+    "ipywidgets (>=8.1.8,<9.0.0)",
+    "tqdm (>=4.67.3,<5.0.0)"
 ]
 
 
