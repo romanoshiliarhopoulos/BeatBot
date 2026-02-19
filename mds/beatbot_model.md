@@ -1,87 +1,77 @@
 # BeatBot Model Architecture
 
-The `BeatBotModel` class (`src/model/lightgbm.py`) is the core engine for predicting DJ cue points. It uses a **Learning-to-Rank** approach powered by LightGBM to evaluate every bar of a song and assign a probability score for being a good **Entry Point** or **Exit Point**.
+The `BeatBotModel` class (`src/model/lightgbm.py`) is the core engine for predicting DJ cue points. It uses a **Learning-to-Rank (LambdaRank)** approach powered by LightGBM to evaluate every bar of a song and rank them by their suitability as an **Entry Point** or **Exit Point**.
 
 ## 1. Core Architecture
 
-### Dual Classifiers
+### Learning-to-Rank (LambdaRank)
 
-Mixing requires two distinct decisions that rely on different musical cues:
+Unlike traditional binary classification (which asks "Is this a cue point?"), BeatBot uses **LambdaRank** with the **NDCG** (Normalized Discounted Cumulative Gain) metric.
 
-1.  **Entry Points (`is_cue_in`)**: Where to _start_ the next track. Typically driven by structural beginnings (Intro, Verse 1 start) and clean beats.
-2.  **Exit Points (`is_cue_out`)**: Where to _mix out_ of the current track. Driven by structural endings (Outro, Chorus end) or breakdown anticipation.
+- **Why?** In DJing, some points are "perfect" (Grade 2), while others are "acceptable" (Grade 1). Validation requires the model to prioritize the perfect points at the top of the list.
+- **Groups:** Each track is treated as a "query group". The model learns to sort bars _within_ a specific track relative to each other, rather than learning a global absolute threshold.
 
-To handle this, `BeatBotModel` wraps **two separate LightGBM classifiers**:
+### Dual Rankers
 
-- `self.entry_model`: Trained only on `is_cue_in` labels.
-- `self.exit_model`: Trained only on `is_cue_out` labels.
+Mixing requires two distinct musical decisions. `BeatBotModel` wraps two separate LightGBM rankers:
+
+1.  **Entry Ranker (`self.entry_model`)**:
+    - **Goal:** Find structural beginnings (Intro starts, breakdowns).
+    - **Configuration:** Highly regularized (`reg_lambda=15.0`) with shallower trees (`max_depth=3`, `num_leaves=6`). This prevents overfitting to specific songs, forcing the model to learn general structural rules.
+2.  **Exit Ranker (`self.exit_model`)**:
+    - **Goal:** Find structural endings (Outros, Chorus ends).
+    - **Configuration:** Less regularization (`reg_lambda=5.0`), deeper trees (`max_depth=4`), allowing it to capture more complex energy dynamics indicative of a mix-out point.
+
+## 2. Training Strategy
+
+### Graded Relevance Labels
+
+To train the ranker effectively, `FeatureExtractor.extract_labels` generates graded targets:
+
+- **2 (Perfect):** The exact bar annotated by a human expert.
+- **1 (Acceptable):** Bars within ±2 bars of the annotation (musically valid alternatives).
+- **0 (Irrelevant):** All other bars.
 
 ### Feature Consistency
 
-The model relies on the `FeatureExtractor` class (`src/features.py`) to ensure that training and inference always use the exact same feature engineering pipeline. This includes:
+The model relies on `FeatureExtractor` (`src/features.py`) to ensure training and inference pipelines are identical. This includes:
 
-- **Key-Invariant Chroma**: Rotating harmonic features so they align to the track's Tonic (Root), making the model key-agnostic.
-- **Rolling Context Windows**: Analyzing energy shifts over +/- 8 bars to detect drops and buildups.
+- **Rolling Context:** +/- 8 bar energy averages.
+- **Key-Invariant Chroma:** Rotating pitch vectors to the track's Tonic so the model learns harmonic function (e.g., "Dominant") rather than specific notes.
+- **Future Contrast:** explicitly calculating "drop anticipation" features.
 
-## 2. Usage Guide
+## 3. Inference & Prediction
 
-### Training
-
-The training process automatically handles the class imbalance (since cue points are rare events, <1% of bars) by calculating `scale_pos_weight`.
-
-```python
-from src.track import Track
-from src.model.lightgbm import BeatBotModel
-
-# Load your tracks (must have cue_in/cue_out labels)
-tracks = [Track(...), ...]
-
-model = BeatBotModel()
-model.train(tracks)
-model.save("beatbot_v1.pkl")
-```
-
-### Prediction (Inference)
-
-The primary output is a DataFrame containing probabilities for every bar.
+### Scoring
 
 ```python
-# Load model
 model = BeatBotModel()
-model.load("beatbot_v1.pkl")
-
-# Predict
-predictions = model.predict_track(new_track)
-# Returns DataFrame with columns: ['bar_index', 'prob_in', 'prob_out']
+model.load("beatbot_lgb.pkl")
+df_scores = model.predict_track(track)
+# Returns DataFrame with raw ranking scores: ['bar_index', 'score_in', 'score_out']
 ```
 
-## 3. Fulfilling Project Criteria
+### Selection Logic (`predict_cue_points`)
 
-The architecture is specifically designed to meet the requirements defined in `README.md`:
+To select the final suggestions from the raw scores:
 
-### Goal A: "Choose an exit cue on current song and entry cue on next song"
+1.  **Sort:** All bars are sorted by their predicted score.
+2.  **Greedy Selection:** The top candidate is picked.
+3.  **Suppression:** Any subsequent candidates within `min_dist_bars` (default 16) of a selected point are skipped to ensure diversity.
+4.  **Top-K:** The process repeats until K (default 3) points are found.
 
-- **Implementation**:
-  - For the **Current Song**, we look at the `prob_out` column. The bar with the highest probability is the "Best Exit".
-  - For the **Next Song**, we look at the `prob_in` column. The bar with the highest probability is the "Best Entry".
+## 4. Hyperparameters
 
-### Goal B: "Find best cue along with 2 alternatives"
+| Parameter             | Entry Model  | Exit Model   | Reason                                   |
+| :-------------------- | :----------- | :----------- | :--------------------------------------- |
+| **Objective**         | `lambdarank` | `lambdarank` | Optimizes list order (NDCG)              |
+| **Num Leaves**        | 6            | 10           | Entry cues are structurally simpler      |
+| **Max Depth**         | 3            | 4            | Exit cues depend on complex context      |
+| **Reg Lambda**        | 15.0         | 5.0          | Entry data is noisier; needs constraints |
+| **Min Child Samples** | 40           | 20           | Prevents splitting on rare outliers      |
 
-- **Implementation**: Since the model outputs a probability _score_ for every single bar, finding alternatives is trivial. We simply sort the probabilities and pick the top N distinct local maxima.
-  - _Example_: Calculate `peaks` in `prob_out` and return the top 3 indices.
+## 5. Why LightGBM LambdaRank?
 
-### Goal C: "Trigger transition within next 10-15s"
-
-- **Implementation**: The model predicts on the entire track timeline in advance. To find the optimal exit "right now":
-  1.  Convert "10-15s" to bar indices (e.g., at 128 BPM, 15s is ~8 bars).
-  2.  Slice the `prob_out` array for the window `[current_bar : current_bar + 8]`.
-  3.  Find the `argmax` within that specific slice.
-  - This returns the _local optimal_ exit point closest to the user's trigger action.
-
-## 4. Why LightGBM?
-
-We chose LightGBM over other classifiers because:
-
-1.  **Speed**: Feature extraction and prediction for a full track takes milliseconds, enabling real-time analysis.
-2.  **Handling NaNs**: It natively handles missing data (e.g., undefined pitch in silent sections).
-3.  **Accuracy**: The Gradient Boosting approach captures complex non-linear interactions between **Structure** (`bar_pos_norm`) and **Energy Dynamics** (`energy_diff_context`) better than linear models.
+1.  **Context Awareness:** It learns that "Bar 33 is better than Bar 32", which is more robust than "Bar 33 is a Cue".
+2.  **Imbalance Handling:** DJ cue points are rare (<1% of bars). Ranking objectives handle this naturally by focusing on the top of the list.
+3.  **Speed:** Inference takes milliseconds per track, enabling real-time feedback.

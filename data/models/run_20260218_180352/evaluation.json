@@ -1,0 +1,43 @@
+{
+    "timestamp": "20260218_180352",
+    "entry_model": {
+        "accuracy": 0.9706074461136512,
+        "precision_1": 0.0,
+        "recall_1": 0.0,
+        "f1_1": 0.0,
+        "auc": 0.8441771347390459
+    },
+    "exit_model": {
+        "accuracy": 0.9741998693664272,
+        "precision_1": 0.0,
+        "recall_1": 0.0,
+        "f1_1": 0.0,
+        "auc": 0.9163190569344428
+    },
+    "features": [
+        "bar_pos_norm",
+        "dist_to_section",
+        "phrase_pos",
+        "duration",
+        "energy_diff_context",
+        "energy_prev_8",
+        "energy_next_8",
+        "energy_volatility",
+        "energy_derivative",
+        "beat_strength",
+        "spectral_centroid",
+        "spectral_flatness",
+        "high_band_energy",
+        "mid_band_energy",
+        "harmonic_ratio",
+        "vocal_conf",
+        "syncopation",
+        "key_conf",
+        "chroma_rel_0",
+        "chroma_rel_3",
+        "chroma_rel_7",
+        "chroma_rel_9",
+        "chroma_rel_11",
+        "is_4_bar"
+    ]
+}

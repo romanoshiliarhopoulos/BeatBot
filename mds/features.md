@@ -1,83 +1,68 @@
-# Feature Engineering & Selection Analysis
+# Audio Feature Engineering
 
-**Date:** 16 February 2026
-**Model:** LightGBM (Gradient Boosting Classifier)
-**Objective:** Identify the most predictive audio features for detecting DJ Cue Points (Entry/Exit) to train the BeatBot ranking model.
+Feature Engineering is the most critical component of the BeatBot pipeline. The `FeatureExtractor` class (`src/features.py`) transforms raw audio signals into 40+ high-level musical descriptors optimized for mixing decisions.
 
-## 1. Executive Summary
+## 1. Feature Philosophy
+To mimic a human DJ, the features must capture three dimensions:
+1.  **Structure**: "Where am I in the song?" (Intro, Outro, Breakdown).
+2.  **Context**: "What just happened and what is coming next?" (Drops, Buildups).
+3.  **Harmonic Function**: "Does this section sound resolved (Tonic) or tense (Dominant)?"
 
-The feature selection process confirmed that **Structural Position** is the primary driver of cue point location, but **Contextual Energy Shifts** and **Harmonic Relationships** are critical for refining the exact placement.
+## 2. Feature Tiers
+The features are organized into 9 distinct tiers.
 
-We successfully transformed raw audio data into high-level musical features. Notably, **rotating chroma vectors** to be key-invariant and adding **rolling energy windows** significantly improved model interpretability and prevented overfitting to specific keys.
+### Tier 1: Structure (The "Where")
+*   `bar_pos_norm`: Normalized position (0.0 to 1.0). The strongest predictor for Entry/Exit cues.
+*   `dist_to_section`: Distance (in bars) to the nearest structural boundary (e.g., Chorus/Verse change).
+*   `phrase_pos`: Position within the current 32-bar phrase.
+*   `duration`: Total track length.
 
-## 2. Feature Importance Ranking (Top Predictors)
+### Tier 2: Energy & Dynamics (The "Vibe")
+*   `energy_diff_context`: Difference between future energy (Next 8 bars) and past energy (Prev 8 bars). Detects transitions.
+*   `energy_volatility`: Standard deviation of energy. Low volatility = stable mixing point.
+*   `energy_derivative`: Rate of change in loudness.
+*   `beat_strength`: Clarity of the beat grid.
 
-Based on LightGBM "Gain" (information gain), the top features are:
+### Tier 3: Timbre & Content
+*   `harmonic_ratio`: Balance between tonal (melody) and noise (percussion) components.
+*   `spectral_flatness`: "Noisiness" of the sound.
+*   `vocal_conf`: **Critical.** Confidence score for vocal presence. DJs avoid mixing over vocals.
+*   `high_band_energy`: Presence of Hi-Hats/Cymbals (often indicates a mixable section).
 
-| Rank   | Feature               | Category   | Importance (Gain) | Insight                                                                                                                |
-| :----- | :-------------------- | :--------- | :---------------- | :--------------------------------------------------------------------------------------------------------------------- |
-| **1**  | `bar_pos_norm`        | Structural | ~54,770           | **The King.** DJing is 90% about _where_ you are in the song (Intro/Outro).                                            |
-| **2**  | `energy_diff_context` | Context    | ~4,620            | Measures the shift in energy between the _previous_ 8 bars and _next_ 8 bars. Detects drops, buildups, and breakdowns. |
-| **3**  | `energy_volatility`   | Dynamics   | ~3,555            | Cues often occur where energy stabilizes after a change.                                                               |
-| **4**  | `energy_prev_8`       | Context    | ~3,341            | The history of the track leading up to the cue.                                                                        |
-| **5**  | `energy_derivative`   | Dynamics   | ~3,143            | Instantaneous rate of change in energy.                                                                                |
-| **6**  | `beat_strength`       | Rhythmic   | ~2,798            | Mix points require a clear, define beat grid.                                                                          |
-| **7**  | `chroma_rel_1`        | Harmonic   | ~2,790            | Pitch class relative to Tonic.                                                                                         |
-| **8**  | `harmonic_ratio`      | Timbral    | ~2,509            | Distinguishes Tonal vs. Noise/Percussive sections.                                                                     |
-| **9**  | `syncopation`         | Rhythmic   | ~2,367            | Complexity of the rhythm.                                                                                              |
-| **10** | `vocal_conf`          | Timbral    | ~1,870            | Vocal avoidance is a key mixing rule.                                                                                  |
+### Tier 4: Key-Invariant Chroma (The "Harmony")
+Raw chroma features (C, C#, D...) are rotated based on the track's Key Tonic.
+*   `chroma_rel_0`: Strength of the Tonic (Root) note.
+*   `chroma_rel_7`: Strength of the Dominant (5th) note.
+*   *Why?* This allows the model to learn harmonic functions (e.g., "Mix out when the song resolves to Tonic") regardless of the actual musical key (Am, F#m, etc.).
 
-## 3. Key Engineering Decisions
+### Tier 5: Rhythmic Grid
+*   `is_4_bar`, `bar_mod_8`, `bar_mod_16`, `bar_mod_32`: Boolean flags for grid alignment.
+*   *Use:* Enforces phrasing rules (e.g., "Always mix on the 1").
 
-### A. Key-Invariant Chroma (`chroma_rel_X`)
+### Tier 6: Flux & Change
+*   `energy_flux`: Instantaneous fluctuation in loudness.
+*   `spectral_flux`: Instantaneous change in timbre (e.g., a crash cymbal).
 
-- **Problem:** Raw Chroma features (`chroma_0` = C, `chroma_1` = C#, etc.) caused the model to overfit to specific keys (e.g., memorizing that "Songs in F Minor often start on C").
-- **Solution:** We rotated the chroma vector so that **Index 0 is always the Tonic (Root)** of the track's key.
-- **Result:** The model now recognizes harmonic functions (Tonic, Dominant, Subdominant) regardless of the absolute key. `chroma_rel_0` (Root) and `chroma_rel_7` (Perfect 5th) appear as top predictors.
+### Tier 7: Advanced Context (The "Human" Features)
+*   `energy_contrast_future`: Ratio of future energy to current. Specifically designed to predict drops.
+*   `is_likely_breakdown`: Heuristic based on Low/Mid energy ratios.
+*   `vocal_future_8`: Look-ahead feature. "Are vocals starting in 8 bars?" (If yes, don't mix out yet).
+*   `vocal_past_8`: Look-behind feature. "Did vocals just finish?" (If yes, good time to mix out).
 
-### B. Context Windows (`energy_diff_context`)
+### Tier 8: Track Metadata
+*   `is_section_start`: Boolean flag from the section segmentation algorithm.
+*   `beat_consistency`: Stability of the tempo/grid.
 
-- **Problem:** A single bar's energy doesn't tell the full story. A quiet bar could be a breakdown or an intro.
-- **Solution:** accurate transitions require looking ahead and behind. We added:
-  - `energy_prev_8`: Average energy of past 8 bars.
-  - `energy_next_8`: Average energy of future 8 bars.
-  - `energy_diff_context`: Future - Past.
-- **Result:** This became the #2 most important feature, proving that **contrast** is what defines a cue point.
+### Tier 9: Composite Features
+*   `phrase_boundary_strength`: A sum (0-5) of all rhythmic grid flags. Higher score = Stronger structural downbeat (e.g., the "1" of a 32-bar phrase).
 
-## 4. Final Feature Set Recommendation
+## 3. Engineering Details
 
-For the production model, we will use the following feature set, organized by tier:
+### Consistency
+The `FeatureExtractor` ensures that training and inference use identical logic. This is crucial for avoiding skew, especially with:
+*   **NaN Handling:** Consistent zero-filling or mean-imputation.
+*   **Rolling Windows:** Ensuring look-ahead windows (`shift(-8)`) are handled correctly at the end of tracks.
 
-### Tier 1: Structure & Context (Must Haves)
-
-- `bar_pos_norm`
-- `energy_diff_context`
-- `dist_to_section`
-- `phrase_pos`
-- `duration`
-
-### Tier 2: Dynamics & Rhythm
-
-- `energy_volatility`
-- `energy_derivative`
-- `beat_strength`
-- `syncopation`
-
-### Tier 3: Musicality & Timbre
-
-- `chroma_rel_0` (Tonic strength)
-- `chroma_rel_7` (Dominant strength)
-- `harmonic_ratio`
-- `vocal_conf` (To avoid clashing vocals)
-- `high_band_energy` (Hi-hats/Air often indicate mix capability)
-
-### Dropped Features
-
-- Raw `chroma_0` through `chroma_11` (Replaced by relative chroma).
-- `beat_consistency` (High correlation with `beat_strength`).
-- `spectral_rolloff` (Redundant with `high_band_energy`).
-
-## 5. Next Steps
-
-1.  Implement the `FeatureExtractor` class in `src/models/features.py` using this exact logic.
-2.  Train the LightGBM Ranker using this reduced feature set.
+### Implementation
+All extraction logic is centralized in:
+`src/features.py` -> `FeatureExtractor.extract(track)`
