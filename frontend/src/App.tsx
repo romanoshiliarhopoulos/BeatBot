@@ -52,7 +52,11 @@ export default function App() {
   const setQueueCursor = useCallback((val: number) => {
     setQueueCursorState(val);
     queueCursorRef.current = val;
-    try { localStorage.setItem("beatbot_cursor", String(val)); } catch { /* ignore */ }
+    try {
+      localStorage.setItem("beatbot_cursor", String(val));
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   useEffect(() => {
@@ -67,7 +71,7 @@ export default function App() {
     if (queue.length > 0 && queueCursor >= queue.length) {
       setQueueCursor(Math.max(0, queue.length - 1));
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queue.length]);
 
   // ── deck state (UI) ──────────────────────────────────────────────────────

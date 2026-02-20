@@ -71,7 +71,9 @@ export default function Deck({
         </span>
         <div className="flex items-center gap-2">
           {saving && (
-            <span className="text-xs text-yellow-400 animate-pulse">saving…</span>
+            <span className="text-xs text-yellow-400 animate-pulse">
+              saving…
+            </span>
           )}
           {role === "UP NEXT" && deck.track && onSkip && (
             <button
