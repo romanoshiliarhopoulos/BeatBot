@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 import pandas as pd
 import lightgbm as lgb
@@ -179,9 +180,19 @@ class BeatBotModel:
         available_cols = [c for c in self.feature_cols if c in X_raw.columns]
         X = X_raw[available_cols].copy()
         
-        # LGBMRanker.predict() returns raw ranking scores (not probabilities)
-        score_in  = self.entry_model.predict(X)
-        score_out = self.exit_model.predict(X)
+        # The pickled models were trained with eval_at inside their params dict.
+        # Newer LightGBM warns about this duplicate on every predict() call.
+        # Suppress only that specific warning; everything else still surfaces.
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="Found 'eval_at' in params",
+                category=UserWarning,
+                module="lightgbm",
+            )
+            # LGBMRanker.predict() returns raw ranking scores (not probabilities)
+            score_in  = self.entry_model.predict(X)
+            score_out = self.exit_model.predict(X)
         
         return pd.DataFrame({
             'bar_index': range(track.num_bars),
