@@ -94,16 +94,16 @@ BeatBot uses a **Learning-to-Rank (LambdaRank)** approach implemented in LightGB
 
 ### Why Learning-to-Rank?
 
-DJing is inherently a ranking problem, not a classification one. Some bars are *perfect* cue points, others are *acceptable*, and most are irrelevant. LambdaRank directly optimises **NDCG** (Normalized Discounted Cumulative Gain), which rewards pushing the best bars to the top of the ranked list.
+DJing is inherently a ranking problem, not a classification one. Some bars are _perfect_ cue points, others are _acceptable_, and most are irrelevant. LambdaRank directly optimises **NDCG** (Normalized Discounted Cumulative Gain), which rewards pushing the best bars to the top of the ranked list.
 
 ### Dual Rankers
 
 Two separate models are trained for the two halves of the mixing decision:
 
-| Model | Goal | Configuration |
-|---|---|---|
+| Model            | Goal                                       | Configuration                                                                                                                  |
+| ---------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
 | **Entry Ranker** | Structural beginnings — intros, breakdowns | High regularisation (`reg_lambda=15`), shallow trees (`max_depth=3`) to learn general structural rules rather than overfitting |
-| **Exit Ranker** | Structural endings — outros, post-chorus | Lower regularisation (`reg_lambda=5`), deeper trees (`max_depth=4`) to capture complex energy dynamics |
+| **Exit Ranker**  | Structural endings — outros, post-chorus   | Lower regularisation (`reg_lambda=5`), deeper trees (`max_depth=4`) to capture complex energy dynamics                         |
 
 ### Training Labels
 
@@ -126,6 +126,7 @@ At inference time (`src/api/state.py → predict_cues`):
 ### Model Artefacts
 
 Trained models are saved under `data/models/`. Each run directory contains:
+
 - `beatbot_model.pkl` — serialised `BeatBotModel`
 - `evaluation.json` — NDCG scores and feature importances
 - `figures/` — training curves and prediction plots
@@ -136,19 +137,19 @@ Trained models are saved under `data/models/`. Each run directory contains:
 
 `src/features.py` computes **40+ features per bar**, organised into 9 tiers:
 
-| Tier | Features | Purpose |
-|---|---|---|
-| 1 – Structure | `bar_pos_norm`, `dist_to_section`, `phrase_pos`, `duration` | "Where am I in the song?" |
-| 2 – Energy | `energy_prev_8`, `energy_next_8`, `energy_volatility`, `energy_derivative`, `beat_strength` | "How energetic is this section?" |
-| 3 – Timbre | `spectral_centroid`, `vocal_conf`, `harmonic_ratio`, `high_band_energy` | "What does it sound like?" |
-| 4 – Chroma | `chroma_rel_0/3/7/9/11` | Key-invariant harmonic function (Tonic, Minor-3rd, Dominant…) |
-| 5 – Rhythmic Grid | `is_4_bar`, `bar_mod_8/16/32` | Phrasing alignment — mixes should land on the "1" |
-| 6 – Flux | `energy_flux`, `spectral_flux` | Instantaneous change (drops, crashes) |
-| 7 – Advanced Context | `energy_contrast_future`, `is_likely_breakdown`, `vocal_future_8`, `vocal_past_8` | Look-ahead / look-behind "human" features |
-| 8 – Metadata | `is_section_start`, `beat_consistency`, `percussion_intensity`, `spectral_rolloff` | Structural and rhythmic metadata |
-| 9 – Composite | `phrase_boundary_strength` | Count of grid alignments (0–5) — strong downbeat signal |
+| Tier                 | Features                                                                                    | Purpose                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| 1 – Structure        | `bar_pos_norm`, `dist_to_section`, `phrase_pos`, `duration`                                 | "Where am I in the song?"                                     |
+| 2 – Energy           | `energy_prev_8`, `energy_next_8`, `energy_volatility`, `energy_derivative`, `beat_strength` | "How energetic is this section?"                              |
+| 3 – Timbre           | `spectral_centroid`, `vocal_conf`, `harmonic_ratio`, `high_band_energy`                     | "What does it sound like?"                                    |
+| 4 – Chroma           | `chroma_rel_0/3/7/9/11`                                                                     | Key-invariant harmonic function (Tonic, Minor-3rd, Dominant…) |
+| 5 – Rhythmic Grid    | `is_4_bar`, `bar_mod_8/16/32`                                                               | Phrasing alignment — mixes should land on the "1"             |
+| 6 – Flux             | `energy_flux`, `spectral_flux`                                                              | Instantaneous change (drops, crashes)                         |
+| 7 – Advanced Context | `energy_contrast_future`, `is_likely_breakdown`, `vocal_future_8`, `vocal_past_8`           | Look-ahead / look-behind "human" features                     |
+| 8 – Metadata         | `is_section_start`, `beat_consistency`, `percussion_intensity`, `spectral_rolloff`          | Structural and rhythmic metadata                              |
+| 9 – Composite        | `phrase_boundary_strength`                                                                  | Count of grid alignments (0–5) — strong downbeat signal       |
 
-Chroma features are **key-invariant**: the raw 12-bin chroma vector is rotated by the track's detected tonic so the model learns harmonic *function* (Dominant, Subdominant) rather than absolute pitch class.
+Chroma features are **key-invariant**: the raw 12-bin chroma vector is rotated by the track's detected tonic so the model learns harmonic _function_ (Dominant, Subdominant) rather than absolute pitch class.
 
 ---
 
@@ -163,16 +164,16 @@ PYTHONPATH=src .venv/bin/uvicorn api.main:app --reload --app-dir src
 
 Key endpoints:
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/tracks` | List all tracks in the library |
-| `GET` | `/audio/{track_id}` | Stream the MP3 file |
-| `POST` | `/predict/{track_id}` | Run cue prediction; returns scores + selected cues |
-| `PATCH` | `/cues/{track_id}` | Override a cue point; validates and broadcasts via WS |
-| `GET/POST/DELETE` | `/queue` | Queue management |
-| `PATCH` | `/queue/reorder` | Reorder two queue positions |
-| `POST` | `/transition/now` | Trigger immediate crossfade |
-| `WS` | `/ws/session` | Real-time push events (`queue.updated`, `cues.accepted`) |
+| Method            | Path                  | Description                                              |
+| ----------------- | --------------------- | -------------------------------------------------------- |
+| `GET`             | `/tracks`             | List all tracks in the library                           |
+| `GET`             | `/audio/{track_id}`   | Stream the MP3 file                                      |
+| `POST`            | `/predict/{track_id}` | Run cue prediction; returns scores + selected cues       |
+| `PATCH`           | `/cues/{track_id}`    | Override a cue point; validates and broadcasts via WS    |
+| `GET/POST/DELETE` | `/queue`              | Queue management                                         |
+| `PATCH`           | `/queue/reorder`      | Reorder two queue positions                              |
+| `POST`            | `/transition/now`     | Trigger immediate crossfade                              |
+| `WS`              | `/ws/session`         | Real-time push events (`queue.updated`, `cues.accepted`) |
 
 ---
 
@@ -220,10 +221,10 @@ Open [http://localhost:5173](http://localhost:5173).
 
 ## Data
 
-| Path | Contents |
-|---|---|
-| `data/custom/annotations/` | JAMS files — manually annotated cue points for ~100 house tracks |
-| `data/custom/house_music_personal.csv` | Track metadata (BPM, key, duration, file path) |
-| `data/M-DJCUE/` | Academic EDM dataset used for additional training signal |
-| `data/models/` | Serialised model runs; the active model path is configured in `src/api/state.py` |
-| `data/processed/` | Pre-extracted feature DataFrames cached as Parquet — regenerated by `src/extractor/extractor.py` if missing |
+| Path                                   | Contents                                                                                                    |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `data/custom/annotations/`             | JAMS files — manually annotated cue points for ~100 house tracks                                            |
+| `data/custom/house_music_personal.csv` | Track metadata (BPM, key, duration, file path)                                                              |
+| `data/M-DJCUE/`                        | Academic EDM dataset used for additional training signal                                                    |
+| `data/models/`                         | Serialised model runs; the active model path is configured in `src/api/state.py`                            |
+| `data/processed/`                      | Pre-extracted feature DataFrames cached as Parquet — regenerated by `src/extractor/extractor.py` if missing |
