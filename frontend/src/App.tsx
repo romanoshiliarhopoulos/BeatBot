@@ -8,6 +8,7 @@ import {
   fetchQueue,
   addToQueue,
   removeFromQueue,
+  reorderQueue,
   clearQueue,
 } from "./api/client";
 import { useAudioEngine } from "./hooks/useAudioEngine";
@@ -47,6 +48,7 @@ export default function App() {
   });
   const queueCursorRef = useRef(queueCursor);
   const queueRef = useRef<QueueItem[]>([]);
+  const activeDeckRef = useRef<ActiveDeck>("A");
 
   // Wrap setter so every cursor change is persisted
   const setQueueCursor = useCallback((val: number) => {
@@ -78,6 +80,9 @@ export default function App() {
   const [deckA, setDeckA] = useState<DeckInfo>(emptyDeck);
   const [deckB, setDeckB] = useState<DeckInfo>(emptyDeck);
   const [activeDeck, setActiveDeck] = useState<ActiveDeck>("A");
+  // Keep a ref so async callbacks always read the current active deck
+  // without capturing stale closure values.
+  useEffect(() => { activeDeckRef.current = activeDeck; }, [activeDeck]);
   const [deckALoading, setDeckALoading] = useState(false);
   const [deckBLoading, setDeckBLoading] = useState(false);
 
@@ -127,15 +132,22 @@ export default function App() {
   }, []);
 
   // ── When queue/library ready, populate empty decks ────────────────────────
+  // Uses activeDeckRef so nowItem always goes into the PLAYING slot and
+  // nextItem into the NEXT slot, regardless of which physical deck is active.
   useEffect(() => {
     if (library.length === 0) return;
     const cursor = queueCursorRef.current;
     const nowItem = queue[cursor];
     const nextItem = queue[cursor + 1];
-    if (nowItem && !deckA.track && !deckALoading)
-      loadDeckSlot("A", nowItem, library);
-    if (nextItem && !deckB.track && !deckBLoading)
-      loadDeckSlot("B", nextItem, library);
+    const active = activeDeckRef.current;
+    const nowDeckInfo  = active === "A" ? deckA : deckB;
+    const nextDeckInfo = active === "A" ? deckB : deckA;
+    const nowLoad  = active === "A" ? deckALoading : deckBLoading;
+    const nextLoad = active === "A" ? deckBLoading : deckALoading;
+    if (nowItem && !nowDeckInfo.track && !nowLoad)
+      loadDeckSlot(active, nowItem, library);
+    if (nextItem && !nextDeckInfo.track && !nextLoad)
+      loadDeckSlot(active === "A" ? "B" : "A", nextItem, library);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queue, library]);
 
@@ -240,16 +252,54 @@ export default function App() {
     setQueue(qs.tracks);
   }, []);
 
+  const handleReorder = useCallback(async (from: number, to: number) => {
+    // Optimistic update so the drag feels instant
+    setQueue((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+
+    // If the UP NEXT slot is affected by the drag, clear it so the reload
+    // effect replaces it with whatever is now at cursor+1.
+    const nextSlot = queueCursorRef.current + 1;
+    if (from === nextSlot || to === nextSlot) {
+      if (activeDeck === "A") setDeckB(emptyDeck());
+      else setDeckA(emptyDeck());
+    }
+
+    try {
+      const qs = await reorderQueue(from, to);
+      setQueue(qs.tracks);
+    } catch (err) {
+      console.error("[App] reorderQueue failed:", err);
+      // Revert by re-fetching
+      const qs = await fetchQueue();
+      setQueue(qs.tracks);
+    }
+  }, [activeDeck]);
+
   // Skip the UP NEXT track: remove it from the queue and load whatever comes after
   const handleSkipNext = useCallback(async () => {
-    const nextPosition = queueCursorRef.current + 1;
+    const cursorAtSkip = queueCursorRef.current;
+    const nextPosition = cursorAtSkip + 1;
     if (nextPosition >= queueRef.current.length) return; // nothing to skip
     const qs = await removeFromQueue(nextPosition);
+    // If a crossfade fired during the await the cursor has already advanced —
+    // the position we removed is no longer the UP NEXT slot. Re-sync the queue
+    // so the UI reflects whatever the server now has, then bail without touching
+    // the deck state (the crossfade handler already wired up the new next deck).
+    if (queueCursorRef.current !== cursorAtSkip) {
+      setQueue(qs.tracks);
+      return;
+    }
     setQueue(qs.tracks);
-    // Clear the next deck slot; the queue-watch effect will reload from the new position
-    if (activeDeck === "A") setDeckB(emptyDeck());
+    // Use the ref — activeDeck may have changed during the await
+    const active = activeDeckRef.current;
+    if (active === "A") setDeckB(emptyDeck());
     else setDeckA(emptyDeck());
-  }, [activeDeck]);
+  }, []);
 
   const handleClear = useCallback(async () => {
     const qs = await clearQueue();
@@ -372,6 +422,7 @@ export default function App() {
             library={library}
             onAdd={handleAdd}
             onRemove={handleRemove}
+            onReorder={handleReorder}
             onClear={handleClear}
             onShuffle={handleShuffle}
           />
