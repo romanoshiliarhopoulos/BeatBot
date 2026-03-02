@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import type { QueueItem, TrackMeta } from "../types";
 
 type CollectionFilter = "all" | "custom" | "m-djcue";
@@ -9,6 +9,7 @@ interface Props {
   library: TrackMeta[];
   onAdd: (trackId: string) => void;
   onRemove: (position: number) => void;
+  onReorder: (fromPosition: number, toPosition: number) => void;
   onClear: () => void;
   onShuffle: (subset: TrackMeta[]) => void;
 }
@@ -31,10 +32,13 @@ export default function Queue({
   library,
   onAdd,
   onRemove,
+  onReorder,
   onClear,
   onShuffle,
 }: Props) {
   const [filter, setFilter] = useState<CollectionFilter>("all");
+  const dragIndexRef = useRef<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   const queuedIds = new Set(queue.map((q) => q.track_id));
 
@@ -108,18 +112,27 @@ export default function Queue({
               const isCurrent = i === currentIndex;
               const isPast = i < currentIndex;
               const isNext = i === currentIndex + 1;
+              const isDraggable = !isCurrent && !isPast;
+              const isDragOver = dragOverIndex === i;
               return (
                 <li
                   key={`${item.track_id}-${i}`}
-                  className={`flex items-start gap-2 px-3 py-2 text-xs group transition-colors ${
-                    isCurrent
-                      ? "bg-green-950/40"
-                      : isPast
-                        ? "opacity-35"
-                        : isNext
-                          ? "bg-blue-950/30"
-                          : "hover:bg-white/5"
-                  }`}
+                  draggable={isDraggable}
+                  onDragStart={isDraggable ? () => { dragIndexRef.current = i; } : undefined}
+                  onDragEnter={isDraggable ? (e) => { e.preventDefault(); setDragOverIndex(i); } : undefined}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={isDraggable ? (e) => {
+                    e.preventDefault();
+                    const from = dragIndexRef.current;
+                    if (from !== null && from !== i) onReorder(from, i);
+                    dragIndexRef.current = null;
+                    setDragOverIndex(null);
+                  } : undefined}
+                  onDragEnd={() => { dragIndexRef.current = null; setDragOverIndex(null); }}
+                  className={`flex items-start gap-2 px-3 py-2 text-xs group transition-colors
+                    ${isCurrent ? "bg-green-950/40" : isPast ? "opacity-35" : isNext ? "bg-blue-950/30" : "hover:bg-white/5"}
+                    ${isDragOver ? "border-t-2 border-purple-400" : ""}
+                  `}
                 >
                   <span
                     className={`shrink-0 w-5 text-center font-mono pt-0.5 ${
@@ -132,6 +145,13 @@ export default function Queue({
                   >
                     {isCurrent ? "▶" : isNext ? "◎" : i + 1}
                   </span>
+
+                  {/* Drag handle — only shown for future (draggable) items */}
+                  {isDraggable && (
+                    <span className="shrink-0 text-gray-700 group-hover:text-gray-500 cursor-grab active:cursor-grabbing pt-0.5 select-none">
+                      ⠿
+                    </span>
+                  )}
 
                   <div className="flex-1 min-w-0">
                     <p
