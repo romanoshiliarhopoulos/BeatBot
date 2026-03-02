@@ -164,7 +164,7 @@ export default function Deck({
                     elapsed={isPlaying ? elapsed : undefined}
                   />
 
-                  {/* 3. MP3 waveform */}
+                  {/* 3. MP3 waveform — only decoded for the PLAYING deck to avoid OOM */}
                   {deck.track && (
                     <WaveformView
                       trackId={deck.track.track_id}
@@ -172,6 +172,7 @@ export default function Deck({
                       exit_sec={deck.exit_sec}
                       duration={deck.track.duration}
                       elapsed={isPlaying ? elapsed : undefined}
+                      enabled={isPlaying}
                     />
                   )}
                 </ErrorBoundary>
