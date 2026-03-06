@@ -22,6 +22,7 @@ import type { ActiveDeck } from "../hooks/useAudioEngine";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useAuth } from "../contexts/AuthContext";
 import { useFolders } from "../contexts/FolderContext";
+import { useMixes } from "../contexts/MixContext";
 
 import Deck from "../components/Deck";
 import Queue from "../components/Queue";
@@ -41,7 +42,10 @@ const emptyDeck = (): DeckInfo => ({
 
 export default function DJEnvironment() {
   const { user, signOut } = useAuth();
-  const { getFileByTrackId } = useFolders();
+  const { getFileByTrackId, folders, addFolder } = useFolders();
+  const { mixes } = useMixes();
+
+  const [selectedMixId, setSelectedMixId] = useState<string | null>(null);
 
   // ── server data ──────────────────────────────────────────────────────────
   const { data: library = [] } = useQuery<TrackMeta[]>({
@@ -385,6 +389,27 @@ export default function DJEnvironment() {
     setQueue(qs.tracks);
   }, []);
 
+  const handleSelectMix = useCallback(
+    async (mixId: string | null) => {
+      setSelectedMixId(mixId);
+      await clearQueue();
+      setQueueCursor(0);
+      setDeckA(emptyDeck());
+      setDeckB(emptyDeck());
+      if (mixId) {
+        const mix = mixes.find((m) => m.id === mixId);
+        if (mix && mix.trackIds.length > 0) {
+          const qs = await addToQueue(mix.trackIds);
+          setQueue(qs.tracks);
+          return;
+        }
+      }
+      // null or empty mix — just leave queue empty
+      setQueue([]);
+    },
+    [mixes],
+  );
+
   // ── cue edit callbacks ────────────────────────────────────────────────────
   const handleNowCueUpdate = useCallback(
     (type: "entry" | "exit", sec: number) =>
@@ -467,6 +492,32 @@ export default function DJEnvironment() {
         </nav>
 
         <div className="ml-auto flex items-center gap-3 text-xs">
+          {/* Folder indicator */}
+          {folders.length === 0 ? (
+            <button
+              onClick={addFolder}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg
+                bg-amber-900/30 border border-amber-700/40 text-amber-400 text-[11px]
+                hover:bg-amber-800/40 transition-colors"
+              title="Link your local music folder so BeatBot can play audio"
+            >
+              <span>⚠</span>
+              <span>Link music folder</span>
+            </button>
+          ) : (
+            <button
+              onClick={addFolder}
+              className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px]
+                text-gray-600 hover:text-gray-400 transition-colors"
+              title={`${folders.length} folder${folders.length !== 1 ? "s" : ""} linked — click to add another`}
+            >
+              <span className="text-green-500">●</span>
+              <span>
+                {folders.length} folder{folders.length !== 1 ? "s" : ""} linked
+              </span>
+            </button>
+          )}
+
           {/* User info + Sign out */}
           {user && (
             <div className="flex items-center gap-3">
@@ -515,6 +566,9 @@ export default function DJEnvironment() {
                 queue={queue}
                 currentIndex={queueCursor}
                 library={combinedLibrary}
+                mixes={mixes}
+                selectedMixId={selectedMixId}
+                onSelectMix={handleSelectMix}
                 onAdd={handleAdd}
                 onRemove={handleRemove}
                 onReorder={handleReorder}

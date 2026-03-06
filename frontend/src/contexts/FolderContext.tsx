@@ -14,6 +14,8 @@ import {
 } from "react";
 import {
   loadFolderHandles,
+  saveFolderHandle,
+  removeFolderHandle,
   verifyHandlePermission,
   type StoredFolder,
 } from "../lib/idb";
@@ -32,6 +34,12 @@ export interface ScannedTrack {
 interface FolderContextValue {
   /** All .mp3 files found across all granted folders */
   tracks: ScannedTrack[];
+  /** Currently granted folders */
+  folders: StoredFolder[];
+  /** Open the OS directory picker and grant access to a new folder */
+  addFolder: () => Promise<void>;
+  /** Remove a previously linked folder */
+  removeFolder: (id: string) => Promise<void>;
   /** Get a File object for a given ScannedTrack key (for audio playback) */
   getFile: (key: string) => Promise<File | null>;
   /** Look up a File by track_id (filename without .mp3 extension) */
@@ -147,10 +155,42 @@ export function FolderProvider({ children }: { children: ReactNode }) {
     [tracks, getFile],
   );
 
+  const addFolder = useCallback(async () => {
+    try {
+      // @ts-ignore – showDirectoryPicker is in the spec but not all TS libs
+      const handle: FileSystemDirectoryHandle =
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (window as any).showDirectoryPicker({ mode: "read" });
+      const id = crypto.randomUUID();
+      const stored: StoredFolder = { id, name: handle.name, handle };
+      await saveFolderHandle(stored);
+      const nextFolders = [...folders, stored];
+      setFolders(nextFolders);
+      await doScan(nextFolders, setTracks);
+    } catch (err: unknown) {
+      // User cancelled the picker — not an error
+      if (err instanceof Error && err.name === "AbortError") return;
+      console.error("[FolderContext] addFolder failed:", err);
+    }
+  }, [folders]);
+
+  const removeFolder = useCallback(
+    async (id: string) => {
+      await removeFolderHandle(id);
+      const nextFolders = folders.filter((f) => f.id !== id);
+      setFolders(nextFolders);
+      await doScan(nextFolders, setTracks);
+    },
+    [folders],
+  );
+
   return (
     <FolderContext.Provider
       value={{
         tracks,
+        folders,
+        addFolder,
+        removeFolder,
         getFile,
         getFileByTrackId,
       }}
