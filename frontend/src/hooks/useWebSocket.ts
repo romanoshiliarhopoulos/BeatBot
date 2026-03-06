@@ -24,14 +24,17 @@ export function useWebSocket(): UseWebSocketReturn {
   const connect = useCallback(() => {
     if (!isMounted.current) return
 
-    // In development Vite proxies the WS connection, but when uvicorn
-    // restarts (--reload) the proxy logs a noisy ECONNRESET that can't be
-    // suppressed from vite.config.  Connecting directly to the backend port
-    // avoids the proxy entirely and eliminates the noise.
-    // In production both frontend and backend share the same host.
-    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    const host = import.meta.env.DEV ? 'localhost:8000' : window.location.host
-    const url = `${protocol}://${host}${WS_URL}`
+    // In dev: connect directly to the local uvicorn (avoids noisy Vite proxy
+    // ECONNRESET on --reload).  In production: derive host from VITE_API_BASE_URL
+    // so the WS goes to Cloud Run, not to the Firebase Hosting domain.
+    let url: string
+    if (import.meta.env.DEV) {
+      url = `ws://localhost:8000${WS_URL}`
+    } else {
+      const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? ''
+      const wsBase = apiBase.replace(/^http/, 'ws')
+      url = `${wsBase}${WS_URL}`
+    }
 
     const ws = new WebSocket(url)
     wsRef.current = ws

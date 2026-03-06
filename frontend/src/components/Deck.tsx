@@ -164,15 +164,16 @@ export default function Deck({
                     elapsed={isPlaying ? elapsed : undefined}
                   />
 
-                  {/* 3. MP3 waveform — only decoded for the PLAYING deck to avoid OOM */}
+                  {/* 3. MP3 waveform — rendered for both decks using local file URL */}
                   {deck.track && (
                     <WaveformView
                       trackId={deck.track.track_id}
+                      src={deck.audioSrc}
                       entry_sec={deck.entry_sec}
                       exit_sec={deck.exit_sec}
                       duration={deck.track.duration}
                       elapsed={isPlaying ? elapsed : undefined}
-                      enabled={isPlaying}
+                      decodeDelay={isPlaying ? 2000 : 6000}
                     />
                   )}
                 </ErrorBoundary>

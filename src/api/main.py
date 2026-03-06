@@ -1,18 +1,24 @@
 """
 BeatBot FastAPI server.
 
-Run:
-    python src/api/main.py
+Run locally:
+    SKIP_AUTH=true python src/api/main.py
   or
-    uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+    SKIP_AUTH=true uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+
+On Cloud Run:
+    Firebase Admin SDK initialises automatically via Application Default
+    Credentials.  No extra environment variables needed beyond what GCP injects.
 
 The server:
-  1. Loads all processed tracks from data/processed/*.pkl
-  2. Loads the latest trained model from data/models/run_*/
-  3. Exposes REST endpoints + one WebSocket channel
+  1. Optionally loads processed tracks from data/processed/*.pkl (local dev).
+  2. Loads the latest trained model from data/models/run_*/ (baked into image).
+  3. Exposes REST + WebSocket endpoints.
+  4. Validates Firebase ID tokens on every request (except SKIP_AUTH=true).
 
-CORS is configured to allow any localhost origin during development.
-For production, restrict CORS_ORIGINS to your actual frontend domain.
+CORS: localhost origins are always allowed.  Set CORS_EXTRA_ORIGIN env var to
+additionally allow your Firebase Hosting domain in production, e.g.:
+    CORS_EXTRA_ORIGIN=https://beatbot-35280.web.app
 """
 from __future__ import annotations
 
@@ -30,8 +36,8 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from api.state import app_state  # noqa: E402  (must come after sys.path tweak)
+from api.auth import _ensure_app as _ensure_firebase  # noqa: E402
 from api.routes import (         # noqa: E402
-    audio,
     cues,
     predict,
     queue,
@@ -54,6 +60,15 @@ log = logging.getLogger("beatbot.main")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("Starting BeatBot API…")
+
+    # Initialise Firebase Admin SDK (uses ADC on Cloud Run, SKIP_AUTH locally).
+    import os
+    if os.getenv("SKIP_AUTH", "false").lower() not in ("true", "1", "yes"):
+        try:
+            _ensure_firebase()
+            log.info("  ✓  Firebase Admin SDK initialised.")
+        except Exception as exc:
+            log.warning("  ⚠  Firebase init failed (set SKIP_AUTH=true for local dev): %s", exc)
 
     n_tracks = app_state.load_tracks()
     log.info("  ✓  %d tracks loaded", n_tracks)
@@ -78,13 +93,24 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Allow the React dev server (localhost:3000 / 5173) and any local origin
+import os as _os
+
+# Always allow local dev origins.
+# Add your Firebase Hosting domain via the CORS_EXTRA_ORIGIN env var, e.g.:
+#   CORS_EXTRA_ORIGIN=https://beatbot-35280.web.app
 CORS_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:5173",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:5173",
 ]
+# CORS_EXTRA_ORIGIN can be a comma-separated list of origins, e.g.:
+#   https://beatbot-35280.web.app,https://beatbot-35280.firebaseapp.com
+_extra = _os.getenv("CORS_EXTRA_ORIGIN", "").strip()
+for _origin in _extra.split(","):
+    _origin = _origin.strip()
+    if _origin:
+        CORS_ORIGINS.append(_origin)
 
 app.add_middleware(
     CORSMiddleware,
@@ -100,7 +126,8 @@ app.include_router(tracks.router,     tags=["Library"])
 app.include_router(predict.router,    tags=["Prediction"])
 app.include_router(cues.router,       tags=["Cues"])
 app.include_router(queue.router,      tags=["Queue"])
-app.include_router(audio.router,      tags=["Audio"])
+# audio.py is intentionally not mounted: audio is served from the browser
+# via the File System Access API (no server-side audio streaming needed).
 app.include_router(transition.router, tags=["Playback"])
 app.include_router(session.router,    tags=["WebSocket"])
 
@@ -110,7 +137,7 @@ def root():
     return {
         "service": "BeatBot API",
         "tracks":  len(app_state.track_registry),
-        "model":   "loaded" if app_state.model is not None else "heuristic",
+        "model":   app_state.model_version or ("heuristic" if app_state.model is None else "loaded"),
         "docs":    "/docs",
     }
 
@@ -118,11 +145,12 @@ def root():
 @app.get("/health", tags=["Meta"])
 def health():
     return {
-        "status":  "ok",
-        "tracks":  len(app_state.track_registry),
-        "model":   app_state.model is not None,
-        "queue":   len(app_state.queue),
-        "ws_clients": __import__("api.ws_manager", fromlist=["manager"]).manager.connection_count,
+        "status":       "ok",
+        "tracks":       len(app_state.track_registry),
+        "model":        app_state.model is not None,
+        "model_version": app_state.model_version,
+        "queue":        len(app_state.queue),
+        "ws_clients":   __import__("api.ws_manager", fromlist=["manager"]).manager.connection_count,
     }
 
 

@@ -10,7 +10,6 @@
  * reloaded with the track after next.
  */
 import { useRef, useState, useCallback, useEffect } from 'react'
-import { audioUrl } from '../api/client'
 
 export type ActiveDeck = 'A' | 'B'
 
@@ -47,7 +46,7 @@ export interface AudioEngineState {
 export interface AudioEngine {
   state: AudioEngineState
   /** Fetch + decode audio for the given deck without starting playback */
-  loadDeck: (deck: ActiveDeck, trackId: string) => Promise<void>
+  loadDeck: (deck: ActiveDeck, trackId: string, file?: File) => Promise<void>
   /** Start playing from entrySec. Schedules auto-crossfade at exitSec. */
   play: (entrySec: number, exitSec: number, fadeSecs: number) => void
   /** Immediately trigger crossfade to the other deck */
@@ -110,7 +109,7 @@ export function useAudioEngine(): AudioEngine {
     }
   }, [])
 
-  const loadDeck = useCallback(async (deck: ActiveDeck, trackId: string) => {
+  const loadDeck = useCallback(async (deck: ActiveDeck, trackId: string, file?: File) => {
     setState(s => deck === 'A' ? { ...s, loadingA: true } : { ...s, loadingB: true })
     const ctx = getCtx()
 
@@ -122,8 +121,13 @@ export function useAudioEngine(): AudioEngine {
     }
 
     try {
-      const resp = await fetch(audioUrl(trackId))
-      const arrayBuf = await resp.arrayBuffer()
+      let arrayBuf: ArrayBuffer
+      if (file) {
+        arrayBuf = await file.arrayBuffer()
+      } else {
+        const resp = await fetch(`/audio/${encodeURIComponent(trackId)}`)
+        arrayBuf = await resp.arrayBuffer()
+      }
       const audioBuf = await ctx.decodeAudioData(arrayBuf)
       decks.current[deck].buffer = audioBuf
       decks.current[deck].trackId = trackId

@@ -7,7 +7,7 @@ PATCH  /queue/reorder        – drag-to-reorder
 DELETE /queue/{position}     – remove one slot
 DELETE /queue                – clear entire queue
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
 from api.schemas import (
     AddToQueueRequest,
@@ -47,18 +47,11 @@ def get_queue():
 async def add_to_queue(body: AddToQueueRequest):
     """
     Add one or more tracks to the end of the queue.
-    Predict cue points for each added track.
-    Returns 404 if any track_id is unknown (but still adds the ones that are found).
+    Unknown track IDs (browser-extracted, not yet in the server registry) are
+    accepted with placeholder cues so the browser can refine them after extraction.
     """
-    missing = app_state.add_tracks(body.track_ids)
+    app_state.add_tracks(body.track_ids)
     await _broadcast_queue()
-
-    if missing:
-        raise HTTPException(
-            status_code=207,
-            detail={"added": len(body.track_ids) - len(missing),
-                    "not_found": missing},
-        )
     return _queue_state()
 
 

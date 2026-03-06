@@ -8,3 +8,18 @@ cue_point.json
 custom
 __pycache__
 *.pkl
+*.env*
+.firebase
+requirements-api*
+firebase.json
+Dockerfile
+.firebaserc
+.gcloudignore
+.git
+.gitignore
+# CLI secrets — copy cli_config.example.py → cli_config.py and fill in values
+src/cli_config.py
+# PyInstaller build artefacts
+build/
+dist/
+*.pyc

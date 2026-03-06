@@ -11,10 +11,6 @@ export default defineConfig({
         target: 'http://localhost:8000',
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
-      // Audio streams directly — FastAPI route is /audio/{id}
-      '/audio': {
-        target: 'http://localhost:8000',
-      },
       // WebSocket — the frontend now connects directly to localhost:8000 in dev
       // (see useWebSocket.ts) so this proxy entry is only a fallback.
       '/ws': {

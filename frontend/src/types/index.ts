@@ -80,4 +80,6 @@ export interface DeckInfo {
   /** entry_sec can be overridden by user */
   entry_sec: number
   exit_sec: number
+  /** Object URL for the local audio file, used by WaveformView */
+  audioSrc?: string
 }

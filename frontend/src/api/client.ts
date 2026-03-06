@@ -7,8 +7,30 @@ import type {
   QueueState,
   EarlyTransitionResponse,
 } from '../types'
+import { firebaseAuth } from '../lib/firebase'
 
-const api = axios.create({ baseURL: '/api' })
+// In production VITE_API_BASE_URL points at the Cloud Run service.
+// In local dev it is unset, so the Vite proxy (/api → localhost:8000) is used.
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
+
+const api = axios.create({ baseURL: BASE_URL })
+
+// Attach Firebase ID token to every request when a user is signed in.
+// The backend's verify_token dependency reads Authorization: Bearer <token>.
+api.interceptors.request.use(async (config) => {
+  const user = firebaseAuth?.currentUser
+  if (user) {
+    try {
+      const token = await user.getIdToken()
+      config.headers = config.headers ?? {}
+      config.headers['Authorization'] = `Bearer ${token}`
+    } catch {
+      // Token fetch failed — let the request proceed without the header;
+      // the server will return 401 if authentication is required.
+    }
+  }
+  return config
+})
 
 // ── Library ────────────────────────────────────────────────────────────────
 
@@ -17,9 +39,39 @@ export async function fetchTracks(): Promise<TrackMeta[]> {
   return data
 }
 
+export async function deleteTrack(trackId: string): Promise<void> {
+  await api.delete(`/tracks/${encodeURIComponent(trackId)}`)
+}
+
+export async function purgeTracks(keepTrackIds: string[]): Promise<{ deleted: number }> {
+  const { data } = await api.post<{ deleted: number }>('/tracks/purge', { keep_track_ids: keepTrackIds })
+  return data
+}
+
+export async function clearAllTracks(): Promise<{ deleted: number }> {
+  const { data } = await api.delete<{ deleted: number }>('/tracks')
+  return data
+}
+
+export async function fetchFeatureIds(): Promise<string[]> {
+  const { data } = await api.get<string[]>('/features')
+  return data
+}
+
 // ── Prediction ────────────────────────────────────────────────────────────
 
-export async function predictCues(trackId: string): Promise<PredictResponse> {
+export async function predictCues(
+  trackId: string,
+  pklBytes?: Uint8Array,
+): Promise<PredictResponse> {
+  if (pklBytes && pklBytes.length > 0) {
+    const { data } = await api.post<PredictResponse>(
+      `/predict/${encodeURIComponent(trackId)}`,
+      pklBytes,
+      { headers: { 'Content-Type': 'application/octet-stream' } },
+    )
+    return data
+  }
   const { data } = await api.post<PredictResponse>(
     `/predict/${encodeURIComponent(trackId)}`
   )
@@ -84,8 +136,3 @@ export async function triggerEarlyTransition(
   return data
 }
 
-// ── Audio URL helper ─────────────────────────────────────────────────────
-
-export function audioUrl(trackId: string): string {
-  return `/audio/${encodeURIComponent(trackId)}`
-}

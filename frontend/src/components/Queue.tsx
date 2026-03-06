@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import type { QueueItem, TrackMeta } from "../types";
 
-type CollectionFilter = "all" | "custom" | "m-djcue";
+type CollectionFilter = "all";
 
 interface Props {
   queue: QueueItem[];
@@ -22,8 +22,6 @@ function fmtTime(sec: number): string {
 
 const FILTER_LABELS: Record<CollectionFilter, string> = {
   all: "All",
-  custom: "Custom",
-  "m-djcue": "M-DJCUE",
 };
 
 export default function Queue({
@@ -118,17 +116,37 @@ export default function Queue({
                 <li
                   key={`${item.track_id}-${i}`}
                   draggable={isDraggable}
-                  onDragStart={isDraggable ? () => { dragIndexRef.current = i; } : undefined}
-                  onDragEnter={isDraggable ? (e) => { e.preventDefault(); setDragOverIndex(i); } : undefined}
+                  onDragStart={
+                    isDraggable
+                      ? () => {
+                          dragIndexRef.current = i;
+                        }
+                      : undefined
+                  }
+                  onDragEnter={
+                    isDraggable
+                      ? (e) => {
+                          e.preventDefault();
+                          setDragOverIndex(i);
+                        }
+                      : undefined
+                  }
                   onDragOver={(e) => e.preventDefault()}
-                  onDrop={isDraggable ? (e) => {
-                    e.preventDefault();
-                    const from = dragIndexRef.current;
-                    if (from !== null && from !== i) onReorder(from, i);
+                  onDrop={
+                    isDraggable
+                      ? (e) => {
+                          e.preventDefault();
+                          const from = dragIndexRef.current;
+                          if (from !== null && from !== i) onReorder(from, i);
+                          dragIndexRef.current = null;
+                          setDragOverIndex(null);
+                        }
+                      : undefined
+                  }
+                  onDragEnd={() => {
                     dragIndexRef.current = null;
                     setDragOverIndex(null);
-                  } : undefined}
-                  onDragEnd={() => { dragIndexRef.current = null; setDragOverIndex(null); }}
+                  }}
                   className={`flex items-start gap-2 px-3 py-2 text-xs group transition-colors
                     ${isCurrent ? "bg-green-950/40" : isPast ? "opacity-35" : isNext ? "bg-blue-950/30" : "hover:bg-white/5"}
                     ${isDragOver ? "border-t-2 border-purple-400" : ""}

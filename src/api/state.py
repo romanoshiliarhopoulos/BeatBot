@@ -67,6 +67,7 @@ class AppState:
     def __init__(self) -> None:
         self.track_registry: Dict[str, Track] = {}
         self.model = None                    # BeatBotModel | None
+        self.model_version: Optional[str] = None   # e.g. "run_20260218_231046"
         self.queue: List[QueueEntry] = []
         self.current_index: int = 0
         self.playback: PlaybackState = PlaybackState()
@@ -124,6 +125,7 @@ class AppState:
             m = BeatBotModel(models_dir=str(latest))
             m.load("beatbot_model.pkl")
             self.model = m
+            self.model_version = latest.name   # e.g. "run_20260218_231046"
             log.info("Model loaded from %s.", latest.name)
             return True
         except Exception as exc:
@@ -135,11 +137,16 @@ class AppState:
     def predict_cues(
         self,
         track: Track,
+        weights: Optional[Dict[str, float]] = None,
     ) -> Tuple[float, float, str, List[float], List[float]]:
         """
         Returns (entry_sec, exit_sec, method, score_in_list, score_out_list).
         method is "model" or "heuristic".
         score_in / score_out are normalised [0,1] per-bar lists.
+
+        weights (optional): per-feature multipliers for future model tuning,
+            e.g. {"energy": 1.5, "bass": 0.8}.  Currently reserved and not
+            applied to the scoring logic.
         """
         bars = track.bars
         n    = len(bars)
@@ -245,16 +252,19 @@ class AppState:
     # ── queue helpers ─────────────────────────────────────────────────────────
 
     def add_tracks(self, track_ids: List[str]) -> List[str]:
-        """Add tracks to queue; returns list of track_ids that were not found."""
-        missing = []
+        """
+        Add tracks to queue.  Unknown track IDs (locally-extracted browser tracks
+        not yet in the registry) are added with placeholder cues (0, 0) so the
+        browser can update them after extraction.
+        """
         for tid in track_ids:
             t = self.track_registry.get(tid)
-            if t is None:
-                missing.append(tid)
-                continue
-            entry_sec, exit_sec, _, _, _ = self.predict_cues(t)
+            if t is not None:
+                entry_sec, exit_sec, _, _, _ = self.predict_cues(t)
+            else:
+                entry_sec, exit_sec = 0.0, 0.0
             self.queue.append(QueueEntry(track_id=tid, entry_sec=entry_sec, exit_sec=exit_sec))
-        return missing
+        return []
 
     def queue_as_list(self) -> List[dict]:
         return [

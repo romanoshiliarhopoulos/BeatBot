@@ -31,6 +31,9 @@ class PredictResponse(BaseModel):
     entry_sec: float
     exit_sec: float
     method: Literal["model", "heuristic"]
+    # Model version tag — bumped each time a new model is deployed to Cloud Run.
+    # Clients can use this to tell users their cue points used a specific model.
+    model_version: Optional[str] = None
     # Optional per-bar feature arrays (all normalised to [0, 1])
     energy: Optional[List[float]] = None          # overall RMS energy
     bass_energy: Optional[List[float]] = None     # low-band (<250 Hz) energy

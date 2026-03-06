@@ -7,16 +7,17 @@
  */
 import { useEffect, useRef, useState } from "react";
 import WaveSurfer from "wavesurfer.js";
-import { audioUrl } from "../api/client";
 
 interface Props {
   trackId: string;
+  /** Object URL for the local audio file. Falls back to nothing if absent. */
+  src?: string;
   entry_sec: number;
   exit_sec: number;
   duration: number;
-  elapsed?: number; // seconds, for playhead
-  /** When false the audio file is not fetched/decoded (avoids double-decode OOM). */
-  enabled?: boolean;
+  elapsed?: number;
+  /** Milliseconds to wait before starting decode (avoids simultaneous OOM). Defaults to 2000. */
+  decodeDelay?: number;
 }
 
 function fmtTime(sec: number): string {
@@ -27,29 +28,27 @@ function fmtTime(sec: number): string {
 
 export default function WaveformView({
   trackId,
+  src,
   entry_sec,
   exit_sec,
   duration,
   elapsed = 0,
-  enabled = true,
+  decodeDelay = 2000,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WaveSurfer | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  // Create / recreate WaveSurfer whenever the trackId changes (only when enabled).
-  // Delayed by DECODE_STAGGER_MS so the Web Audio engine (used for actual playback)
-  // can complete its own MP3 decode first — running both decodes simultaneously
-  // causes OOM / Chrome "Aw Snap" (error code 5) on longer tracks.
-  const DECODE_STAGGER_MS = 3500;
-
   useEffect(() => {
-    if (!enabled) return;
+    if (!src) {
+      setLoading(false);
+      setError(true);
+      return;
+    }
     setLoading(true);
     setError(false);
 
-    // Destroy any previous instance immediately on track change
     if (wsRef.current) {
       wsRef.current.destroy();
       wsRef.current = null;
@@ -63,14 +62,14 @@ export default function WaveformView({
 
       ws = WaveSurfer.create({
         container: containerRef.current,
-        url: audioUrl(trackId),
+        url: src,
         waveColor: "#334155",
         progressColor: "#22c55e",
         cursorColor: "#22c55e",
         cursorWidth: 1,
         height: 72,
         normalize: true,
-        interact: false, // playback controlled by Web Audio engine, not WS
+        interact: false,
         barWidth: 2,
         barGap: 1,
         barRadius: 1,
@@ -84,7 +83,7 @@ export default function WaveformView({
       });
 
       wsRef.current = ws;
-    }, DECODE_STAGGER_MS);
+    }, decodeDelay);
 
     return () => {
       if (staggerTimer) clearTimeout(staggerTimer);
@@ -95,7 +94,7 @@ export default function WaveformView({
       }
       wsRef.current = null;
     };
-  }, [trackId, enabled]);
+  }, [trackId, src, decodeDelay]);
 
   // Advance playhead (setTime without triggering playback)
   useEffect(() => {
@@ -114,7 +113,7 @@ export default function WaveformView({
 
   // When not enabled (e.g. UP NEXT deck) skip rendering — avoids double MP3
   // decode that can push Chrome into OOM/Aw-Snap territory.
-  if (!enabled) {
+  if (!src) {
     return (
       <div className="flex flex-col gap-1">
         <div className="border-t border-white/5 pt-1" />
@@ -123,7 +122,7 @@ export default function WaveformView({
         </p>
         <div className="relative bg-[#07070f] rounded-lg overflow-hidden border border-white/5 h-18 flex items-center justify-center">
           <span className="text-[10px] text-gray-700">
-            Waveform available when track is playing
+            Grant folder access to see waveform
           </span>
         </div>
       </div>
