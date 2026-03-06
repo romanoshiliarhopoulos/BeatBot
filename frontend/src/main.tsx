@@ -5,6 +5,7 @@ import "./index.css";
 import App from "./App.tsx";
 import { AuthProvider } from "./contexts/AuthContext";
 import { FolderProvider } from "./contexts/FolderContext";
+import { MixProvider } from "./contexts/MixContext";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 60_000 } },
@@ -15,7 +16,9 @@ createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <FolderProvider>
-          <App />
+          <MixProvider>
+            <App />
+          </MixProvider>
         </FolderProvider>
       </AuthProvider>
     </QueryClientProvider>

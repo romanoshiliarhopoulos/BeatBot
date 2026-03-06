@@ -71,6 +71,19 @@ export type WsEvent =
   | { type: 'error'; code: string; message: string; recoverable: boolean }
   | { type: 'pong' }
 
+// ── Mixes ──────────────────────────────────────────────────────────────────
+
+/** A user-defined ordered subset of library tracks, stored in localStorage. */
+export interface Mix {
+  id: string
+  name: string
+  /** Key from MIX_COLORS palette. Defaults to 'purple'. */
+  color?: string
+  /** Ordered list of track_ids in this mix. */
+  trackIds: string[]
+  createdAt: number
+}
+
 // Local UI state
 export type PlaybackStatus = 'idle' | 'loading' | 'playing' | 'crossfading' | 'paused'
 

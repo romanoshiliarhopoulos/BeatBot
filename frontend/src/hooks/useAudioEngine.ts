@@ -125,8 +125,10 @@ export function useAudioEngine(): AudioEngine {
       if (file) {
         arrayBuf = await file.arrayBuffer()
       } else {
-        const resp = await fetch(`/audio/${encodeURIComponent(trackId)}`)
-        arrayBuf = await resp.arrayBuffer()
+        // No local file available — skip audio decode silently.
+        // The user needs to grant folder access via the Link Folder button.
+        console.warn(`[AudioEngine] No local file for deck ${deck} track "${trackId}" — grant folder access first.`)
+        return
       }
       const audioBuf = await ctx.decodeAudioData(arrayBuf)
       decks.current[deck].buffer = audioBuf

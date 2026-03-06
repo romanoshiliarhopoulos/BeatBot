@@ -24,16 +24,19 @@ export function useWebSocket(): UseWebSocketReturn {
   const connect = useCallback(() => {
     if (!isMounted.current) return
 
-    // In dev: connect directly to the local uvicorn (avoids noisy Vite proxy
-    // ECONNRESET on --reload).  In production: derive host from VITE_API_BASE_URL
-    // so the WS goes to Cloud Run, not to the Firebase Hosting domain.
+    // If VITE_API_BASE_URL is set (e.g. pointing at the hosted Cloud Run service),
+    // derive the WS URL from it — works in both dev and production.
+    // Otherwise fall back to the local uvicorn in dev (avoids noisy Vite proxy
+    // ECONNRESET on --reload) or the same origin in production.
+    const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? ''
     let url: string
-    if (import.meta.env.DEV) {
-      url = `ws://localhost:8000${WS_URL}`
-    } else {
-      const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? ''
+    if (apiBase) {
       const wsBase = apiBase.replace(/^http/, 'ws')
       url = `${wsBase}${WS_URL}`
+    } else if (import.meta.env.DEV) {
+      url = `ws://localhost:8000${WS_URL}`
+    } else {
+      url = WS_URL
     }
 
     const ws = new WebSocket(url)
