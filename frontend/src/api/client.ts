@@ -1,6 +1,7 @@
 import axios from 'axios'
 import type {
   TrackMeta,
+  Mix,
   PredictResponse,
   CueEditRequest,
   CueEditResponse,
@@ -136,3 +137,34 @@ export async function triggerEarlyTransition(
   return data
 }
 
+// ── Mixes ─────────────────────────────────────────────────────────────────
+
+export async function fetchMixes(): Promise<Mix[]> {
+  console.log('[client] fetchMixes → GET /mixes')
+  const { data } = await api.get<Mix[]>('/mixes')
+  console.log('[client] fetchMixes ← response:', data)
+  return data
+}
+
+export async function apiCreateMix(mix: Mix): Promise<Mix> {
+  console.log('[client] apiCreateMix → POST /mixes', mix)
+  const { data } = await api.post<Mix>('/mixes', mix)
+  console.log('[client] apiCreateMix ← response:', data)
+  return data
+}
+
+export async function apiUpdateMix(
+  id: string,
+  updates: Partial<Pick<Mix, 'name' | 'trackIds' | 'color'>>
+): Promise<Mix> {
+  console.log('[client] apiUpdateMix → PUT /mixes/' + id, updates)
+  const { data } = await api.put<Mix>(`/mixes/${encodeURIComponent(id)}`, updates)
+  console.log('[client] apiUpdateMix ← response:', data)
+  return data
+}
+
+export async function apiDeleteMix(id: string): Promise<void> {
+  console.log('[client] apiDeleteMix → DELETE /mixes/' + id)
+  await api.delete(`/mixes/${encodeURIComponent(id)}`)
+  console.log('[client] apiDeleteMix ← done')
+}

@@ -39,6 +39,7 @@ from api.state import app_state  # noqa: E402  (must come after sys.path tweak)
 from api.auth import _ensure_app as _ensure_firebase  # noqa: E402
 from api.routes import (         # noqa: E402
     cues,
+    mixes,
     predict,
     queue,
     session,
@@ -123,6 +124,7 @@ app.add_middleware(
 # ── routes ────────────────────────────────────────────────────────────────────
 
 app.include_router(tracks.router,     tags=["Library"])
+app.include_router(mixes.router,      tags=["Mixes"])
 app.include_router(predict.router,    tags=["Prediction"])
 app.include_router(cues.router,       tags=["Cues"])
 app.include_router(queue.router,      tags=["Queue"])
