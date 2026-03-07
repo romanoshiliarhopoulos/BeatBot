@@ -417,8 +417,6 @@ function NewMixCard({ onClick }: { onClick: () => void }) {
 
 // ── MixGrid ───────────────────────────────────────────────────────────────
 
-type SortKey = "created" | "name" | "size";
-
 function MixGrid({
   mixes,
   library,
@@ -432,9 +430,11 @@ function MixGrid({
   onOpenMix: (id: string) => void;
   onCreateMix: () => void;
 }) {
-  const [sort, setSort] = useState<SortKey>("created");
+  const [sort, setSort] = useState<"recent" | "name" | "size">("recent");
 
-  const sorted = [...mixes].sort((a, b) => {
+  console.log("[MixGrid] render — mixes count:", mixes.length, mixes);
+
+  const sortedMixes = [...mixes].sort((a, b) => {
     if (sort === "name") return a.name.localeCompare(b.name);
     if (sort === "size") return b.trackIds.length - a.trackIds.length;
     return b.createdAt - a.createdAt;
@@ -447,6 +447,26 @@ function MixGrid({
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
+      {mixes.length > 1 && (
+        <div className="flex items-center gap-2 px-6 pt-4 pb-1 shrink-0">
+          <span className="text-[10px] uppercase tracking-widest text-gray-600 font-semibold mr-1">
+            Sort
+          </span>
+          {(["recent", "name", "size"] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setSort(s)}
+              className={`px-2.5 py-1 rounded text-[11px] transition-colors ${
+                sort === s
+                  ? "bg-purple-600/30 text-purple-300"
+                  : "text-gray-600 hover:text-gray-400"
+              }`}
+            >
+              {s === "recent" ? "Recent" : s === "name" ? "Name" : "Size"}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto px-6 pb-6 pt-2">
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
           <MixCard
@@ -455,13 +475,15 @@ function MixGrid({
             accent
             onClick={onOpenLibrary}
           />
-          {sorted.map((mix) => {
+          {sortedMixes.map((mix) => {
             const dur = fmtTotal(mix.trackIds, library);
             return (
               <MixCard
                 key={mix.id}
                 name={mix.name}
-                subtitle={`${mix.trackIds.length} track${mix.trackIds.length !== 1 ? "s" : ""}${dur ? ` · ${dur}` : ""}`}
+                subtitle={`${mix.trackIds.length} track${
+                  mix.trackIds.length !== 1 ? "s" : ""
+                }${dur ? ` · ${dur}` : ""}`}
                 color={mix.color}
                 onClick={() => onOpenMix(mix.id)}
               />

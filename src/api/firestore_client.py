@@ -162,3 +162,58 @@ def clear_library(uid: str) -> int:
         except Exception as exc:
             log.error("Firestore clear_library(%s) [%s] error: %s", uid, collection_name, exc)
     return deleted
+
+
+# ── Mixes ─────────────────────────────────────────────────────────────────────
+
+def get_mixes(uid: str) -> List[Dict[str, Any]]:
+    """Return all documents from users/{uid}/mixes, ordered by createdAt."""
+    if not _AVAILABLE:
+        return []
+    try:
+        docs = (
+            _db()
+            .collection("users")
+            .document(uid)
+            .collection("mixes")
+            .stream()
+        )
+        mixes = [doc.to_dict() for doc in docs]
+        return sorted(mixes, key=lambda m: m.get("createdAt", 0))
+    except Exception as exc:
+        log.error("Firestore get_mixes(%s) error: %s", uid, exc)
+        return []
+
+
+def set_mix(uid: str, mix_id: str, data: Dict[str, Any]) -> None:
+    """Upsert a mix document into users/{uid}/mixes/{mix_id}."""
+    if not _AVAILABLE:
+        return
+    try:
+        (
+            _db()
+            .collection("users")
+            .document(uid)
+            .collection("mixes")
+            .document(mix_id)
+            .set(data)
+        )
+    except Exception as exc:
+        log.error("Firestore set_mix(%s, %s) error: %s", uid, mix_id, exc)
+
+
+def delete_mix(uid: str, mix_id: str) -> None:
+    """Delete users/{uid}/mixes/{mix_id}."""
+    if not _AVAILABLE:
+        return
+    try:
+        (
+            _db()
+            .collection("users")
+            .document(uid)
+            .collection("mixes")
+            .document(mix_id)
+            .delete()
+        )
+    except Exception as exc:
+        log.error("Firestore delete_mix(%s, %s) error: %s", uid, mix_id, exc)
