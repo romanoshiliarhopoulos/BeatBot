@@ -281,10 +281,11 @@ firebase deploy --only firestore:rules
 gcloud builds submit --tag gcr.io/beatbot-35280/beatbot-api
 gcloud run deploy beatbot-api \
   --image gcr.io/beatbot-35280/beatbot-api \
-  --region us-east5 \
+  --region us-east4 \
   --platform managed \
   --allow-unauthenticated \
   --memory 1Gi \
+  --min-instances 0 \
   --set-env-vars CORS_EXTRA_ORIGIN=https://beatbot-35280.web.app
 ```
 

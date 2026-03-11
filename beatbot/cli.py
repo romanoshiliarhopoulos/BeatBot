@@ -38,7 +38,7 @@ import urllib.request
 from pathlib import Path
 
 # ── built-in config (these are client-side values, intentionally public) ──────
-API_URL          = os.environ.get("BEATBOT_API_URL",      "https://beatbot-api-65953831924.us-east5.run.app")
+API_URL          = os.environ.get("BEATBOT_API_URL",      "https://beatbot-api-65953831924.us-east4.run.app")
 FIREBASE_API_KEY = os.environ.get("BEATBOT_FIREBASE_KEY", "AIzaSyChzGuK_tgwscYd5sZX3iBCNRYPLiLgeig")
 
 CREDS_FILE = Path.home() / ".beatbot" / "credentials.json"
@@ -287,6 +287,18 @@ def cmd_extract(args) -> None:
         print("Features uploaded! Reload the BeatBot web app to see your updated cue points.\n")
 
 
+# ── daemon ───────────────────────────────────────────────────────────────────────
+
+def cmd_daemon(args) -> None:
+    """Start the local HTTP/WebSocket sidecar for the BeatBot web app."""
+    from beatbot import daemon as _daemon
+    _daemon.run(
+        port=args.port,
+        autostart=args.autostart,
+        uninstall=args.uninstall,
+    )
+
+
 # ── entry point ────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -310,11 +322,29 @@ def main() -> None:
     p_stat.add_argument("folders", nargs="+", metavar="folder",
                         help="Path(s) to your music folder(s)")
 
+    p_daemon = sub.add_parser(
+        "daemon",
+        help="Start local sidecar server for the Discover page (http://127.0.0.1:7337)",
+    )
+    p_daemon.add_argument(
+        "--port", type=int, default=7337,
+        help="Port to listen on (default: 7337)",
+    )
+    p_daemon.add_argument(
+        "--autostart", action="store_true",
+        help="Install as a macOS login item and exit (daemon starts on every login)",
+    )
+    p_daemon.add_argument(
+        "--uninstall", action="store_true",
+        help="Remove the macOS login-item autostart entry",
+    )
+
     args = parser.parse_args()
     {
         "login":   cmd_login,
         "extract": cmd_extract,
         "status":  cmd_status,
+        "daemon":  cmd_daemon,
     }[args.command](args)
 
 

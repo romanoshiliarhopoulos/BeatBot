@@ -96,15 +96,13 @@ app = FastAPI(
 
 import os as _os
 
-# Always allow local dev origins.
+# Always allow any localhost/127.0.0.1 origin regardless of port (covers all
+# Vite dev server ports: 5173, 5174, 5175 …).
 # Add your Firebase Hosting domain via the CORS_EXTRA_ORIGIN env var, e.g.:
 #   CORS_EXTRA_ORIGIN=https://beatbot-35280.web.app
-CORS_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:5173",
-]
+CORS_ORIGINS = []
+CORS_ORIGIN_REGEX = r"http://(localhost|127\.0\.0\.1)(:\d+)?"
+
 # CORS_EXTRA_ORIGIN can be a comma-separated list of origins, e.g.:
 #   https://beatbot-35280.web.app,https://beatbot-35280.firebaseapp.com
 _extra = _os.getenv("CORS_EXTRA_ORIGIN", "").strip()
@@ -116,6 +114,7 @@ for _origin in _extra.split(","):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
+    allow_origin_regex=CORS_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

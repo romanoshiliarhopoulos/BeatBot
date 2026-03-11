@@ -3,6 +3,20 @@ git:
 	git commit -m "new"
 	git push
 
+# ── Cloud Run deploy ──────────────────────────────────────────────────────────
+deploy:
+	gcloud builds submit --tag gcr.io/beatbot-35280/beatbot-api
+	gcloud run deploy beatbot-api \
+		--image gcr.io/beatbot-35280/beatbot-api \
+		--region us-east4 \
+		--platform managed \
+		--allow-unauthenticated \
+		--memory 1Gi \
+		--min-instances 0 \
+		--set-env-vars CORS_EXTRA_ORIGIN=https://beatbot-35280.web.app
+
+.PHONY: deploy
+
 # ── BeatBot pip package ───────────────────────────────────────────────────────
 #
 # The CLI is distributed via PyPI (beatbot package), NOT as a zip or binary.
@@ -13,7 +27,8 @@ git:
 #   3. twine upload dist/*.whl dist/*.tar.gz
 
 publish:
+	rm -rf dist/
 	poetry build
-	twine upload dist/*.whl dist/*.tar.gz
+	/Library/Frameworks/Python.framework/Versions/3.11/bin/python3 -m twine upload dist/*.whl dist/*.tar.gz
 
 .PHONY: publish

@@ -415,7 +415,7 @@ function NewMixCard({ onClick }: { onClick: () => void }) {
   );
 }
 
-// ── MixGrid ───────────────────────────────────────────────────────────────
+// ── MixGrid
 
 function MixGrid({
   mixes,
