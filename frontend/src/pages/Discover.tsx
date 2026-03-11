@@ -284,6 +284,9 @@ function VideoModal({
   video: SearchResult;
   onClose: () => void;
 }) {
+  const embedSrc = `https://www.youtube-nocookie.com/embed/${video.video_id}?autoplay=1&rel=0`;
+  const ytUrl = `https://www.youtube.com/watch?v=${video.video_id}`;
+
   // Close on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -316,23 +319,25 @@ function VideoModal({
             ✕
           </button>
         </div>
+
         {/* YouTube embed — includes native seekbar */}
         <div className="aspect-video">
           <iframe
-            src={`https://www.youtube.com/embed/${video.video_id}?autoplay=1&rel=0`}
+            src={embedSrc}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
             className="w-full h-full"
             title={video.title}
           />
         </div>
-        {/* Footer: channel + open in YouTube */}
+
+        {/* Footer */}
         <div className="flex items-center justify-between px-3 py-2 border-t border-white/[0.07]">
           {video.channel && (
             <span className="text-[11px] text-gray-500">{video.channel}</span>
           )}
           <a
-            href={`https://www.youtube.com/watch?v=${video.video_id}`}
+            href={ytUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="ml-auto text-[11px] text-purple-400 hover:text-purple-300 transition-colors"

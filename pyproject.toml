@@ -1,6 +1,6 @@
 [project]
 name = "beatbot"
-version = "0.1.1"
+version = "0.1.2"
 description = "BeatBot CLI — local audio feature extraction for cloud cue-point prediction"
 authors = [
     {name = "Romanos Chiliarchopoulos",email = "romanoshiliarhopoulos@gmail.com"}
@@ -18,6 +18,12 @@ dependencies = [
 
 # ── Optional: dev / server extras ────────────────────────────────────────────
 [project.optional-dependencies]
+daemon = [
+    "fastapi>=0.115.0,<1.0.0",
+    "uvicorn>=0.30.0,<1.0.0",
+    "wsproto>=1.2.0",
+    "yt-dlp>=2024.0.0",
+]
 server = [
     "pandas>=2.2.0,<3.0.0",
     "lightgbm>=4.6.0,<5.0.0",

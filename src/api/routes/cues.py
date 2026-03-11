@@ -7,9 +7,10 @@ import pickle
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException
 
-from api.auth import verify_token
+from api.auth import DEV_UID, verify_token
 from api.firestore_client import get_features, set_features
 from api.schemas import CueEditRequest, CueEditResponse
+from api.state import app_state
 from api.ws_manager import manager
 
 router = APIRouter()
@@ -45,16 +46,27 @@ async def edit_cue(
     updated Track pkl back to Firestore, and broadcast a cues.accepted event
     over WebSocket to all connected clients.
     """
-    # Fetch raw features from Firestore
-    pkl_bytes = get_features(uid, track_id)
-    if pkl_bytes is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Track '{track_id}' not found. Run `beatbot extract` first.",
-        )
+    # ── Resolve Track object ──────────────────────────────────────────────────
+    # In local-dev mode (SKIP_AUTH=true) tracks live in the in-memory registry;
+    # in production they live in Firestore.
+    use_registry = uid == DEV_UID
 
-    # Deserialise (supports both beatbot.track.Track and track.Track)
-    track = _unpickle(pkl_bytes)
+    if use_registry:
+        track = app_state.track_registry.get(track_id)
+        if track is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Track '{track_id}' not found in local registry.",
+            )
+    else:
+        pkl_bytes = get_features(uid, track_id)
+        if pkl_bytes is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Track '{track_id}' not found. Run `beatbot extract` first.",
+            )
+        # Deserialise (supports both beatbot.track.Track and track.Track)
+        track = _unpickle(pkl_bytes)
 
     # Snap to nearest bar boundary
     bar_index  = int(np.argmin(np.abs(track.bars - body.timestamp_sec)))
@@ -66,8 +78,11 @@ async def edit_cue(
     else:
         track.cue_out = np.array([accepted_sec])
 
-    # Persist updated pkl back to Firestore
-    set_features(uid, track_id, pickle.dumps(track))
+    # Persist: registry in dev, Firestore in production
+    if use_registry:
+        app_state.track_registry[track_id] = track
+    else:
+        set_features(uid, track_id, pickle.dumps(track))
 
     resp = CueEditResponse(
         track_id=track_id,
