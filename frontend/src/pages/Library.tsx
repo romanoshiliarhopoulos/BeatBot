@@ -415,7 +415,7 @@ function NewMixCard({ onClick }: { onClick: () => void }) {
   );
 }
 
-// ── MixGrid 
+// ── MixGrid
 
 type SortKey = "created" | "name" | "size";
 
@@ -432,7 +432,7 @@ function MixGrid({
   onOpenMix: (id: string) => void;
   onCreateMix: () => void;
 }) {
-  const [sort, setSort] = useState<SortKey>("created");
+  const [sort, _setSort] = useState<SortKey>("created");
 
   const sorted = [...mixes].sort((a, b) => {
     if (sort === "name") return a.name.localeCompare(b.name);

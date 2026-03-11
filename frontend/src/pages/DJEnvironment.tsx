@@ -28,6 +28,7 @@ import Deck from "../components/Deck";
 import Queue from "../components/Queue";
 import Transport from "../components/Transport";
 import Library from "./Library";
+import Discover from "./Discover";
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -457,7 +458,7 @@ export default function DJEnvironment() {
   }, [engine.state.isPlaying]);
 
   // ── UI view ───────────────────────────────────────────────────────────────
-  const [view, setView] = useState<"dj" | "library">("dj");
+  const [view, setView] = useState<"dj" | "library" | "discover">("dj");
 
   // ── render ─────────────────────────────────────────────────────────────────
   const nowLoading = activeDeck === "A" ? deckALoading : deckBLoading;
@@ -476,7 +477,7 @@ export default function DJEnvironment() {
 
         {/* Tab nav */}
         <nav className="flex items-center gap-1 ml-4 p-0.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
-          {(["dj", "library"] as const).map((v) => (
+          {(["dj", "library", "discover"] as const).map((v) => (
             <button
               key={v}
               onClick={() => setView(v)}
@@ -486,7 +487,7 @@ export default function DJEnvironment() {
                   : "text-gray-500 hover:text-gray-300"
               }`}
             >
-              {v === "dj" ? "DJ" : "Library"}
+              {v === "dj" ? "DJ" : v === "library" ? "Library" : "Discover"}
             </button>
           ))}
         </nav>
@@ -537,6 +538,8 @@ export default function DJEnvironment() {
 
       {view === "library" ? (
         <Library />
+      ) : view === "discover" ? (
+        <Discover />
       ) : (
         <>
           {/* ── Decks + Queue ───────────────────────────────────────────────────── */}
