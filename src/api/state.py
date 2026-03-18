@@ -61,6 +61,13 @@ class QueueEntry:
     exit_sec: float
 
 
+@dataclass
+class UserState:
+    queue: List[QueueEntry] = field(default_factory=list)
+    current_index: int = 0
+    playback: PlaybackState = field(default_factory=PlaybackState)
+
+
 # ── AppState ─────────────────────────────────────────────────────────────────
 
 class AppState:
@@ -68,9 +75,12 @@ class AppState:
         self.track_registry: Dict[str, Track] = {}
         self.model = None                    # BeatBotModel | None
         self.model_version: Optional[str] = None   # e.g. "run_20260218_231046"
-        self.queue: List[QueueEntry] = []
-        self.current_index: int = 0
-        self.playback: PlaybackState = PlaybackState()
+        self.users: Dict[str, UserState] = {}
+
+    def get_user_state(self, uid: str) -> UserState:
+        if uid not in self.users:
+            self.users[uid] = UserState()
+        return self.users[uid]
 
     # ── boot ─────────────────────────────────────────────────────────────────
 
@@ -365,26 +375,28 @@ class AppState:
 
     # ── queue helpers ─────────────────────────────────────────────────────────
 
-    def add_tracks(self, track_ids: List[str]) -> List[str]:
+    def add_tracks(self, uid: str, track_ids: List[str]) -> List[str]:
         """
         Add tracks to queue.  Unknown track IDs (locally-extracted browser tracks
         not yet in the registry) are added with placeholder cues (0, 0) so the
         browser can update them after extraction.
         """
+        user_state = self.get_user_state(uid)
         for tid in track_ids:
             t = self.track_registry.get(tid)
             if t is not None:
                 entry_sec, exit_sec, _, _, _ = self.predict_cues(t)
             else:
                 entry_sec, exit_sec = 0.0, 0.0
-            self.queue.append(QueueEntry(track_id=tid, entry_sec=entry_sec, exit_sec=exit_sec))
+            user_state.queue.append(QueueEntry(track_id=tid, entry_sec=entry_sec, exit_sec=exit_sec))
         return []
 
-    def queue_as_list(self) -> List[dict]:
+    def queue_as_list(self, uid: str) -> List[dict]:
+        user_state = self.get_user_state(uid)
         return [
             {"position": i, "track_id": e.track_id,
              "entry_sec": e.entry_sec, "exit_sec": e.exit_sec}
-            for i, e in enumerate(self.queue)
+            for i, e in enumerate(user_state.queue)
         ]
 
     # ── cue override persistence ──────────────────────────────────────────────
@@ -420,12 +432,13 @@ class AppState:
                 pickle.dump(t, f)
 
         # Update queue cue if this track is queued
-        for entry in self.queue:
-            if entry.track_id == track_id:
-                if cue_type == "entry":
-                    entry.entry_sec = accepted
-                else:
-                    entry.exit_sec = accepted
+        for user_state in self.users.values():
+            for entry in user_state.queue:
+                if entry.track_id == track_id:
+                    if cue_type == "entry":
+                        entry.entry_sec = accepted
+                    else:
+                        entry.exit_sec = accepted
 
         return accepted, bar_index
 

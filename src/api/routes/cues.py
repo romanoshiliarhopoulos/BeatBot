@@ -92,7 +92,7 @@ async def edit_cue(
     )
 
     # Broadcast to all WS clients so every open tab sees the update
-    await manager.broadcast({
+    await manager.broadcast_to_user(uid, {
         "type":        "cues.accepted",
         "track_id":    track_id,
         "cue_type":    body.cue_type,

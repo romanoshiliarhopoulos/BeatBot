@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { WsEvent } from '../types'
+import { firebaseAuth } from '../lib/firebase'
 
 const WS_URL = '/ws/session'
 // Exponential backoff: starts fast after uvicorn --reload drops the connection,
@@ -21,8 +22,26 @@ export function useWebSocket(): UseWebSocketReturn {
   const reconnectDelay = useRef(RECONNECT_BASE_MS)
   const isMounted = useRef(true)
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (!isMounted.current) return
+
+    let token = ''
+    try {
+      if (firebaseAuth?.currentUser) {
+        token = await firebaseAuth.currentUser.getIdToken()
+      } else {
+        // Fallback for dev mode where firebase isn't configured
+        const session = localStorage.getItem("beatbot_dev_session")
+        if (session) {
+          const parsed = JSON.parse(session)
+          if (parsed && parsed.uid) {
+             token = "dev-" + parsed.uid
+          }
+        }
+      }
+    } catch {
+      // Ignored
+    }
 
     // If VITE_API_BASE_URL is set (e.g. pointing at the hosted Cloud Run service),
     // derive the WS URL from it — works in both dev and production.
@@ -37,6 +56,10 @@ export function useWebSocket(): UseWebSocketReturn {
       url = `ws://localhost:8000${WS_URL}`
     } else {
       url = WS_URL
+    }
+
+    if (token) {
+      url += `?token=${encodeURIComponent(token)}`
     }
 
     const ws = new WebSocket(url)

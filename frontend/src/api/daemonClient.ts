@@ -8,8 +8,28 @@
  * missing daemon without hanging.
  */
 
+import { firebaseAuth } from '../lib/firebase'
+
 const DAEMON = "http://127.0.0.1:7337"
 const WS_URL = "ws://127.0.0.1:7337/ws"
+
+async function getAuthToken(): Promise<string | undefined> {
+  try {
+    if (firebaseAuth?.currentUser) {
+      return await firebaseAuth.currentUser.getIdToken()
+    }
+    const session = localStorage.getItem("beatbot_dev_session")
+    if (session) {
+      const parsed = JSON.parse(session)
+      if (parsed && parsed.uid) {
+         return "dev-" + parsed.uid
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return undefined
+}
 
 export interface SearchResult {
   video_id: string
@@ -86,10 +106,11 @@ export async function daemonImport(
   video_id: string,
   title: string,
 ): Promise<{ track_id: string }> {
+  const id_token = await getAuthToken()
   const res = await fetch(`${DAEMON}/import`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ video_id, title }),
+    body: JSON.stringify({ video_id, title, id_token }),
   })
   if (!res.ok) throw new Error(`Import request failed (${res.status})`)
   return res.json()

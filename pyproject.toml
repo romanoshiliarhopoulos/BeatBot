@@ -1,6 +1,6 @@
 [project]
 name = "beatbot"
-version = "0.1.2"
+version = "0.1.3"
 description = "BeatBot CLI — local audio feature extraction for cloud cue-point prediction"
 authors = [
     {name = "Romanos Chiliarchopoulos",email = "romanoshiliarhopoulos@gmail.com"}
