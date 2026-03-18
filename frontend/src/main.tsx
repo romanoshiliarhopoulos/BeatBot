@@ -7,7 +7,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { FolderProvider } from "./contexts/FolderContext";
 import { MixProvider } from "./contexts/MixContext";
 
-// Clear performance measures in development mode to prevent Aw, Snap! crashes 
+// Clear performance measures in development mode to prevent Aw, Snap! crashes
 // from React DevTools tracking thousands of rapid UI updates (e.g., playhead animation)
 if (import.meta.env.DEV) {
   setInterval(() => {

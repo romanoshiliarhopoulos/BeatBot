@@ -119,7 +119,9 @@ export default function Transport({
       <div className="flex items-center gap-2 shrink-0">
         <select
           value={playLength}
-          onChange={(e) => onPlayLengthChange(e.target.value as PlayLengthProfile)}
+          onChange={(e) =>
+            onPlayLengthChange(e.target.value as PlayLengthProfile)
+          }
           className="bg-gray-800 border border-gray-700 text-gray-300 text-xs rounded px-2 py-1"
         >
           <option value="short">Short</option>

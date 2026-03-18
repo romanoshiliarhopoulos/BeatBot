@@ -170,14 +170,8 @@ export default function FeatureCharts({
   syncId,
   elapsed,
 }: Props) {
-  const {
-    bar_times,
-    num_bars,
-    energy,
-    bass_energy,
-    high_energy,
-    mid_energy,
-  } = prediction;
+  const { bar_times, num_bars, energy, bass_energy, high_energy, mid_energy } =
+    prediction;
 
   const tickStep = Math.max(1, Math.floor(num_bars / 8));
   const entryBar = nearestBar(bar_times, entry_sec);
