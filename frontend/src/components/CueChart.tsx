@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ComposedChart,
   XAxis,
@@ -18,6 +18,7 @@ interface Props {
   exit_sec: number;
   onCueEdit: (type: "entry" | "exit", sec: number) => void;
   isEditable?: boolean;
+  defaultEditMode?: "entry" | "exit";
   syncId?: string;
   elapsed?: number;
 }
@@ -42,10 +43,15 @@ export default function CueChart({
   exit_sec,
   onCueEdit,
   isEditable = true,
+  defaultEditMode = "entry",
   syncId,
   elapsed,
 }: Props) {
-  const [editMode, setEditMode] = useState<"entry" | "exit">("entry");
+  const [editMode, setEditMode] = useState<"entry" | "exit">(defaultEditMode);
+
+  useEffect(() => {
+    setEditMode(defaultEditMode);
+  }, [defaultEditMode, prediction.track_id]);
 
   const { bar_times, score_in, score_out, num_bars } = prediction;
 

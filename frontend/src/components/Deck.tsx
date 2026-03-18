@@ -117,21 +117,27 @@ export default function Deck({
         </div>
       )}
 
-      {/* Progress bar (NOW PLAYING) */}
-      {isPlaying && deck.track && (
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-xs text-gray-400 w-10">
-            {elapsed !== undefined ? fmtTime(elapsed) : "--:--"}
-          </span>
-          <div className="flex-1 h-1 bg-gray-800 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-green-500 rounded-full transition-all duration-250"
-              style={{ width: `${progress * 100}%` }}
-            />
-          </div>
-          <span className="font-mono text-xs text-gray-600 w-10 text-right">
-            {fmtTime(deck.track.duration)}
-          </span>
+      {/* Progress row (reserved on both decks for vertical alignment) */}
+      {deck.track && (
+        <div className="h-5 flex items-center gap-2">
+          {isPlaying ? (
+            <>
+              <span className="font-mono text-xs text-gray-400 w-10">
+                {elapsed !== undefined ? fmtTime(elapsed) : "--:--"}
+              </span>
+              <div className="flex-1 h-1 bg-gray-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-green-500 rounded-full transition-all duration-250"
+                  style={{ width: `${progress * 100}%` }}
+                />
+              </div>
+              <span className="font-mono text-xs text-gray-600 w-10 text-right">
+                {fmtTime(deck.track.duration)}
+              </span>
+            </>
+          ) : (
+            <div className="w-full" aria-hidden="true" />
+          )}
         </div>
       )}
 
@@ -151,6 +157,7 @@ export default function Deck({
                     exit_sec={deck.exit_sec}
                     onCueEdit={handleCueEdit}
                     isEditable={true}
+                    defaultEditMode={isPlaying ? "exit" : "entry"}
                     syncId={syncId}
                     elapsed={isPlaying ? elapsed : undefined}
                   />

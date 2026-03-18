@@ -4,10 +4,24 @@
  *   • auth user display + sign-out
  *   • folder indicator + link back to onboarding
  */
-import { useState, useEffect, useCallback, useRef } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import type { DeckInfo, QueueItem, TrackMeta, PlaybackStatus } from "../types";
+import type {
+  DeckInfo,
+  PredictResponse,
+  QueueItem,
+  TrackMeta,
+  PlaybackStatus,
+  PlayLengthProfile,
+} from "../types";
 import {
   fetchTracks,
   predictCues,
@@ -38,6 +52,145 @@ const emptyDeck = (): DeckInfo => ({
   entry_sec: 0,
   exit_sec: 0,
 });
+
+const getPlayWindow = (
+  durationSec: number,
+  profile: PlayLengthProfile,
+): { minBody: number; maxBody: number } => {
+  const safeDuration = Math.max(30, durationSec);
+  const maxPractical = Math.max(25, safeDuration * 0.92);
+
+  const requested =
+    profile === "short"
+      ? { min: 90, max: 150 }
+      : profile === "long"
+        ? { min: 180, max: Number.POSITIVE_INFINITY }
+        : { min: 150, max: 180 };
+
+  const minBody = Math.max(25, Math.min(requested.min, safeDuration * 0.8));
+  let maxBody =
+    requested.max === Number.POSITIVE_INFINITY
+      ? maxPractical
+      : Math.min(requested.max, maxPractical);
+
+  if (maxBody <= minBody) {
+    maxBody = Math.max(minBody + 5, maxPractical);
+  }
+
+  return { minBody, maxBody };
+};
+
+const nearestIndex = (arr: number[], target: number): number => {
+  if (!arr.length) return 0;
+  let bestIndex = 0;
+  let bestDist = Math.abs(arr[0] - target);
+  for (let i = 1; i < arr.length; i += 1) {
+    const d = Math.abs(arr[i] - target);
+    if (d < bestDist) {
+      bestDist = d;
+      bestIndex = i;
+    }
+  }
+  return bestIndex;
+};
+
+const argMax = (arr: number[]): number => {
+  if (!arr.length) return 0;
+  let best = 0;
+  for (let i = 1; i < arr.length; i += 1) {
+    if ((arr[i] ?? -Infinity) > (arr[best] ?? -Infinity)) best = i;
+  }
+  return best;
+};
+
+const adaptCuesToPlayLength = (
+  pred: PredictResponse,
+  profile: PlayLengthProfile,
+): { entrySec: number; exitSec: number } => {
+  const bars = pred.bar_times ?? [];
+  if (bars.length < 2) {
+    return { entrySec: pred.entry_sec, exitSec: pred.exit_sec };
+  }
+
+  const scoreIn = Array.from({ length: bars.length }, (_, i) => pred.score_in?.[i] ?? 0);
+  const scoreOutRaw = Array.from({ length: bars.length }, (_, i) => pred.score_out?.[i] ?? 0);
+
+  const duration = Math.max(1, bars[bars.length - 1] - bars[0]);
+  const { minBody, maxBody } = getPlayWindow(duration, profile);
+
+  // Derive cue candidates from probability distributions (frontend-owned logic).
+  const entryScoresWeighted = scoreIn.map((s, i) => {
+    const pos = i / Math.max(bars.length - 1, 1); // 0..1
+    const earlyWeight = pos <= 0.55 ? 1 : Math.max(0, 1 - (pos - 0.55) / 0.25);
+    return s * earlyWeight;
+  });
+
+  const exitScoresWeighted = scoreOutRaw.map((s, i) => {
+    const pos = i / Math.max(bars.length - 1, 1); // 0..1
+    const lateWeight = Math.max(0, Math.min(1, 1 - (pos - 0.72) / 0.16));
+    return s * lateWeight;
+  });
+
+  const baseEntry = argMax(entryScoresWeighted);
+  const baseExit = argMax(exitScoresWeighted);
+
+  const body = bars[baseExit] - bars[baseEntry];
+  if (body >= minBody && body <= maxBody) {
+    return { entrySec: bars[baseEntry], exitSec: bars[baseExit] };
+  }
+
+  // Pass 1: keep entry fixed and move exit only (live UX feels stable).
+  let bestExit = -1;
+  let bestExitScore = -Infinity;
+  for (let i = 0; i < bars.length; i += 1) {
+    const d = bars[i] - bars[baseEntry];
+    if (d < minBody || d > maxBody) continue;
+    const score = exitScoresWeighted[i] ?? 0;
+    if (score > bestExitScore) {
+      bestExitScore = score;
+      bestExit = i;
+    }
+  }
+  if (bestExit >= 0) {
+    return { entrySec: bars[baseEntry], exitSec: bars[bestExit] };
+  }
+
+  // Pass 2: limited entry movement if absolutely needed.
+  const shift = Math.max(4, Math.floor(bars.length * 0.08));
+  const lo = Math.max(0, baseEntry - shift);
+  const hi = Math.min(bars.length - 1, baseEntry + shift);
+
+  let bestEntry = baseEntry;
+  let bestPairExit = Math.max(baseEntry + 1, baseExit);
+  let bestPairScore = -Infinity;
+
+  for (let e = lo; e <= hi; e += 1) {
+    for (let x = e + 1; x < bars.length; x += 1) {
+      const d = bars[x] - bars[e];
+      if (d < minBody || d > maxBody) continue;
+
+      const inScore = entryScoresWeighted[e] ?? 0;
+      const outScore = exitScoresWeighted[x] ?? 0;
+      const entryPenalty = 0.32 * Math.abs(e - baseEntry) / bars.length;
+      const exitPenalty = 0.08 * Math.abs(x - baseExit) / bars.length;
+      const pairScore = 0.35 * inScore + 0.65 * outScore - entryPenalty - exitPenalty;
+
+      if (pairScore > bestPairScore) {
+        bestPairScore = pairScore;
+        bestEntry = e;
+        bestPairExit = x;
+      }
+    }
+  }
+
+  if (bestPairScore > -Infinity) {
+    return { entrySec: bars[bestEntry], exitSec: bars[bestPairExit] };
+  }
+
+  const fallbackExitTarget = Math.min(bars[bars.length - 1], bars[baseEntry] + maxBody);
+  const fallbackExit = Math.max(baseEntry + 1, nearestIndex(bars, fallbackExitTarget));
+  return { entrySec: bars[baseEntry], exitSec: bars[fallbackExit] };
+};
 
 // ── DJEnvironment ──────────────────────────────────────────────────────────
 
@@ -105,8 +258,22 @@ export default function DJEnvironment() {
   const [deckALoading, setDeckALoading] = useState(false);
   const [deckBLoading, setDeckBLoading] = useState(false);
 
+  // Revoke stale object URLs to avoid browser memory growth in long sessions.
+  useEffect(() => {
+    return () => {
+      if (deckA.audioSrc) URL.revokeObjectURL(deckA.audioSrc);
+    };
+  }, [deckA.audioSrc]);
+
+  useEffect(() => {
+    return () => {
+      if (deckB.audioSrc) URL.revokeObjectURL(deckB.audioSrc);
+    };
+  }, [deckB.audioSrc]);
+
   // ── playback ─────────────────────────────────────────────────────────────
   const [fadeSecs, setFadeSecs] = useState(7);
+  const [playLength, setPlayLength] = useState<PlayLengthProfile>("medium");
   const [playbackStatus, setPlaybackStatus] = useState<PlaybackStatus>("idle");
   const didAutoXfade = useRef(false);
 
@@ -192,11 +359,13 @@ export default function DJEnvironment() {
         console.groupEnd();
         // ────────────────────────────────────────────────────────────────
 
+        const adapted = adaptCuesToPlayLength(pred, playLength);
+
         setSlot({
           track,
           prediction: pred,
-          entry_sec: pred.entry_sec,
-          exit_sec: pred.exit_sec,
+          entry_sec: adapted.entrySec,
+          exit_sec: adapted.exitSec,
           audioSrc: file ? URL.createObjectURL(file) : undefined,
         });
       } catch (err) {
@@ -205,8 +374,26 @@ export default function DJEnvironment() {
         setLoading(false);
       }
     },
-    [engine, getFileByTrackId],
+    [engine, getFileByTrackId, playLength],
   );
+
+  // Instantly adapt displayed cues when play length changes (no API wait).
+  useEffect(() => {
+    const adaptDeck = (setDeck: Dispatch<SetStateAction<DeckInfo>>) => {
+      setDeck((current) => {
+        if (!current.track || !current.prediction) return current;
+        const adapted = adaptCuesToPlayLength(current.prediction, playLength);
+        return {
+          ...current,
+          entry_sec: adapted.entrySec,
+          exit_sec: adapted.exitSec,
+        };
+      });
+    };
+
+    adaptDeck(setDeckA);
+    adaptDeck(setDeckB);
+  }, [playLength]);
 
   // ── load queue on mount ───────────────────────────────────────────────────
   useEffect(() => {
@@ -457,6 +644,19 @@ export default function DJEnvironment() {
       setPlaybackStatus("idle");
   }, [engine.state.isPlaying]);
 
+  // Keep engine auto-fade schedule aligned with live cue edits / length changes.
+  useEffect(() => {
+    if (!engine.state.isPlaying) return;
+    if (!nowDeck.track) return;
+    engine.rescheduleTransition(nowDeck.exit_sec, fadeSecs);
+  }, [
+    nowDeck.track,
+    nowDeck.exit_sec,
+    fadeSecs,
+    engine.state.isPlaying,
+    engine.rescheduleTransition,
+  ]);
+
   // ── UI view ───────────────────────────────────────────────────────────────
   const [view, setView] = useState<"dj" | "library" | "discover">("dj");
 
@@ -591,6 +791,8 @@ export default function DJEnvironment() {
               onMixNow={handleMixNow}
               fadeSecs={fadeSecs}
               onFadeChange={setFadeSecs}
+              playLength={playLength}
+              onPlayLengthChange={setPlayLength}
               currentTrack={nowDeck.track?.track_id ?? null}
               nextTrack={nextDeck.track?.track_id ?? null}
               elapsed={engine.state.elapsed}

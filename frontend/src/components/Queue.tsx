@@ -37,7 +37,11 @@ export default function Queue({
   const dragIndexRef = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
-  const queuedIds = new Set(queue.map((q) => q.track_id));
+  // Hide history: only show current + upcoming queue entries.
+  const startIndex = Math.min(Math.max(currentIndex, 0), queue.length);
+  const visibleQueue = queue.slice(startIndex);
+
+  const queuedIds = new Set(visibleQueue.map((q) => q.track_id));
 
   // If a mix is selected, use its tracks in mix order; otherwise all library alpha-sorted
   const selectedMix = mixes.find((m) => m.id === selectedMixId) ?? null;
@@ -61,7 +65,7 @@ export default function Queue({
           <span className="text-xs font-bold uppercase tracking-widest text-gray-400">
             Queue
           </span>
-          {queue.length > 0 && (
+          {visibleQueue.length > 0 && (
             <button
               onClick={onClear}
               className="text-xs text-gray-600 hover:text-red-400 transition-colors"
@@ -104,26 +108,27 @@ export default function Queue({
       {/* ── Scrollable body ───────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto min-h-0">
         {/* Active queue items */}
-        {queue.length === 0 ? (
+        {visibleQueue.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-6 text-gray-700 text-xs text-center px-4">
             Queue is empty — add tracks below or shuffle.
           </div>
         ) : (
           <ul className="divide-y divide-white/5">
-            {queue.map((item, i) => {
-              const isCurrent = i === currentIndex;
-              const isPast = i < currentIndex;
-              const isNext = i === currentIndex + 1;
-              const isDraggable = !isCurrent && !isPast;
-              const isDragOver = dragOverIndex === i;
+            {visibleQueue.map((item, visibleIndex) => {
+              const actualIndex = startIndex + visibleIndex;
+              const isCurrent = visibleIndex === 0;
+              const isNext = visibleIndex === 1;
+              const isDraggable = !isCurrent;
+              const isDragOver = dragOverIndex === actualIndex;
               return (
                 <li
-                  key={`${item.track_id}-${i}`}
+                  key={`${item.track_id}-${actualIndex}`}
+                  data-queue-index={actualIndex}
                   draggable={isDraggable}
                   onDragStart={
                     isDraggable
                       ? () => {
-                          dragIndexRef.current = i;
+                          dragIndexRef.current = actualIndex;
                         }
                       : undefined
                   }
@@ -131,7 +136,7 @@ export default function Queue({
                     isDraggable
                       ? (e) => {
                           e.preventDefault();
-                          setDragOverIndex(i);
+                          setDragOverIndex(actualIndex);
                         }
                       : undefined
                   }
@@ -141,7 +146,8 @@ export default function Queue({
                       ? (e) => {
                           e.preventDefault();
                           const from = dragIndexRef.current;
-                          if (from !== null && from !== i) onReorder(from, i);
+                          if (from !== null && from !== actualIndex)
+                            onReorder(from, actualIndex);
                           dragIndexRef.current = null;
                           setDragOverIndex(null);
                         }
@@ -152,7 +158,7 @@ export default function Queue({
                     setDragOverIndex(null);
                   }}
                   className={`flex items-start gap-2 px-3 py-2 text-xs group transition-colors
-                    ${isCurrent ? "bg-green-950/40" : isPast ? "opacity-35" : isNext ? "bg-blue-950/30" : "hover:bg-white/5"}
+                    ${isCurrent ? "bg-green-950/40" : isNext ? "bg-blue-950/30" : "hover:bg-white/5"}
                     ${isDragOver ? "border-t-2 border-purple-400" : ""}
                   `}
                 >
@@ -165,7 +171,7 @@ export default function Queue({
                           : "text-gray-600"
                     }`}
                   >
-                    {isCurrent ? "▶" : isNext ? "◎" : i + 1}
+                    {isCurrent ? "▶" : isNext ? "◎" : visibleIndex + 1}
                   </span>
 
                   {/* Drag handle — only shown for future (draggable) items */}

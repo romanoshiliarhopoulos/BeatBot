@@ -69,7 +69,9 @@ export async function predictCues(
     const { data } = await api.post<PredictResponse>(
       `/predict/${encodeURIComponent(trackId)}`,
       pklBytes,
-      { headers: { 'Content-Type': 'application/octet-stream' } },
+      {
+        headers: { 'Content-Type': 'application/octet-stream' },
+      },
     )
     return data
   }

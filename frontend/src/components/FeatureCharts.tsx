@@ -1,10 +1,10 @@
 /**
  * FeatureCharts — stacked per-bar feature visualisations.
  *
- * Renders up to three compact charts:
- *   1. Energy landscape  — overall energy + bass + highs
- *   2. Beat & rhythm     — beat strength
- *   3. Vocal activity    — vocal presence probability
+ * Renders compact per-bar feature visualisations for the DJ deck.
+ *
+ * Current deck view intentionally shows only:
+ *   1. Energy landscape  — overall energy + bass + mids + highs
  *
  * All arrays are already normalised [0,1] by the backend.
  * Entry / exit cue positions are shown as reference lines.
@@ -177,8 +177,6 @@ export default function FeatureCharts({
     bass_energy,
     high_energy,
     mid_energy,
-    beat_strength,
-    vocal_presence,
   } = prediction;
 
   const tickStep = Math.max(1, Math.floor(num_bars / 8));
@@ -202,18 +200,8 @@ export default function FeatureCharts({
       }))
     : null;
 
-  // ── 2. Beat strength ────────────────────────────────────────────────────
-  const beatData = beat_strength
-    ? baseData.map((row, i) => ({ ...row, beat: beat_strength[i] }))
-    : null;
-
-  // ── 3. Vocal presence ───────────────────────────────────────────────────
-  const vocalData = vocal_presence
-    ? baseData.map((row, i) => ({ ...row, vocal: vocal_presence[i] }))
-    : null;
-
   // Nothing to show
-  if (!energyData && !beatData && !vocalData) {
+  if (!energyData) {
     return (
       <div className="text-[10px] text-gray-700 italic px-1 py-2">
         No feature data available for this track.
@@ -262,28 +250,6 @@ export default function FeatureCharts({
           title="Energy Landscape"
           data={energyData}
           series={energySeries}
-          {...sharedProps}
-        />
-      )}
-
-      {beatData && (
-        <MiniChart
-          title="Beat Strength"
-          data={beatData}
-          series={[
-            { key: "beat", name: "Beat", color: "#facc15", opacity: 0.2 },
-          ]}
-          {...sharedProps}
-        />
-      )}
-
-      {vocalData && (
-        <MiniChart
-          title="Vocal Activity"
-          data={vocalData}
-          series={[
-            { key: "vocal", name: "Vocals", color: "#f472b6", opacity: 0.2 },
-          ]}
           {...sharedProps}
         />
       )}

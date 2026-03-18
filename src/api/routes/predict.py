@@ -33,7 +33,7 @@ import io
 import json
 import logging
 import pickle
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -132,6 +132,13 @@ async def predict(
             "Reserved for future model tuning — ignored in current release."
         ),
     ),
+    play_length: Literal["short", "medium", "long"] = Query(
+        default="medium",
+        description=(
+            "Desired play-length profile used when finalising cue points: "
+            "short (1:30–2:30), medium (2:30–3:00), long (3:00+)."
+        ),
+    ),
 ):
     """
     Predict entry / exit cue points for a track.
@@ -203,7 +210,9 @@ async def predict(
     # ── 4. Run model inference (always fresh — no prediction cache) ───────────
     log.info("[%s] Running model inference (uid=%s)", track_id, uid)
     entry_sec, exit_sec, method, score_in, score_out = app_state.predict_cues(
-        t, weights=weight_map or None
+        t,
+        weights=weight_map or None,
+        play_length=play_length,
     )
 
     vocal = (

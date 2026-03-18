@@ -17,6 +17,12 @@ deploy:
 
 .PHONY: deploy
 
+deploy-front:
+	cd frontend && npm run build
+	cd frontend && firebase deploy --only hosting
+
+.PHONY: deploy-front
+	
 # ── BeatBot pip package ───────────────────────────────────────────────────────
 #
 # The CLI is distributed via PyPI (beatbot package), NOT as a zip or binary.

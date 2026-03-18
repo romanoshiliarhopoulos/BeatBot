@@ -20,6 +20,7 @@ export interface PredictResponse {
   entry_sec: number
   exit_sec: number
   method: 'model' | 'heuristic'
+  model_version?: string | null
   // Optional per-bar feature arrays, all normalised [0,1]
   energy?: number[]
   bass_energy?: number[]
@@ -28,6 +29,8 @@ export interface PredictResponse {
   beat_strength?: number[]
   vocal_presence?: number[]
 }
+
+export type PlayLengthProfile = 'short' | 'medium' | 'long'
 
 export interface CueEditRequest {
   cue_type: 'entry' | 'exit'
