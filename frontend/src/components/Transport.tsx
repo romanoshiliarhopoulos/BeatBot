@@ -1,4 +1,4 @@
-import type { PlaybackStatus } from "../types";
+import type { PlaybackStatus, PlayLengthProfile } from "../types";
 
 interface Props {
   status: PlaybackStatus;
@@ -8,6 +8,8 @@ interface Props {
   onMixNow: () => void;
   fadeSecs: number;
   onFadeChange: (secs: number) => void;
+  playLength: PlayLengthProfile;
+  onPlayLengthChange: (value: PlayLengthProfile) => void;
   currentTrack: string | null;
   nextTrack: string | null;
   elapsed: number;
@@ -28,6 +30,8 @@ export default function Transport({
   onMixNow,
   fadeSecs,
   onFadeChange,
+  playLength,
+  onPlayLengthChange,
   currentTrack,
   nextTrack,
   elapsed,
@@ -102,7 +106,7 @@ export default function Transport({
         <button
           onClick={onMixNow}
           title="Mix Now (Space)"
-          className="px-3 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-600 text-white text-xs font-semibold transition-colors whitespace-nowrap flex items-center gap-1.5 shadow-lg shadow-purple-950/50"
+          className="self-end mb-0.5 px-3 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-600 text-white text-xs font-semibold transition-colors whitespace-nowrap flex items-center gap-1.5 shadow-lg shadow-purple-950/50"
         >
           Mix Now
           <kbd className="text-[10px] bg-purple-900 px-1 rounded opacity-70">
@@ -113,6 +117,16 @@ export default function Transport({
 
       {/* Fade duration */}
       <div className="flex items-center gap-2 shrink-0">
+        <select
+          value={playLength}
+          onChange={(e) => onPlayLengthChange(e.target.value as PlayLengthProfile)}
+          className="bg-gray-800 border border-gray-700 text-gray-300 text-xs rounded px-2 py-1"
+        >
+          <option value="short">Short</option>
+          <option value="medium">Medium</option>
+          <option value="long">Long</option>
+        </select>
+
         <span className="text-gray-600 text-xs">Fade</span>
         <select
           value={fadeSecs}

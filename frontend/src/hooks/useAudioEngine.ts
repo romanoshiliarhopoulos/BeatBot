@@ -51,6 +51,8 @@ export interface AudioEngine {
   play: (entrySec: number, exitSec: number, fadeSecs: number) => void
   /** Immediately trigger crossfade to the other deck */
   crossfadeNow: (entrySec: number, fadeSecs: number) => void
+  /** Re-schedule active deck auto-fade to match updated exit cue */
+  rescheduleTransition: (exitSec: number, fadeSecs: number) => void
   /** Stop all playback */
   stop: () => void
   /** Resume AudioContext (required after user gesture on some browsers) */
@@ -161,6 +163,29 @@ export function useAudioEngine(): AudioEngine {
     deckRef.startedAtOffset = offsetSec
   }, [getCtx])
 
+  const rescheduleTransition = useCallback((exitSec: number, fadeSecs: number) => {
+    const ctx = ctxRef.current
+    if (!ctx) return
+    if (!state.isPlaying) return
+
+    const activeDeck = activeDeckRef.current
+    const activeRef = decks.current[activeDeck]
+    if (!activeRef.source) return
+
+    if (crossfadeTimerRef.current) clearTimeout(crossfadeTimerRef.current)
+
+    const elapsedNow = (ctx.currentTime - activeRef.startedAtCtxTime) + activeRef.startedAtOffset
+    const remainingMs = Math.max(0, (exitSec - elapsedNow) * 1000)
+
+    crossfadeTimerRef.current = setTimeout(() => {
+      const g = decks.current[activeDeck].gain
+      if (!g) return
+      g.gain.cancelScheduledValues(ctx.currentTime)
+      g.gain.setValueAtTime(g.gain.value, ctx.currentTime)
+      g.gain.linearRampToValueAtTime(0, ctx.currentTime + fadeSecs)
+    }, remainingMs)
+  }, [state.isPlaying])
+
   const play = useCallback((
     entrySec: number,
     exitSec: number,
@@ -188,23 +213,25 @@ export function useAudioEngine(): AudioEngine {
     setState(s => ({ ...s, isPlaying: true, activeDeck: deck }))
     startTicker()
 
-    // Schedule auto-crossfade
+    // Schedule auto-fade from the current cue selection.
+    // If cues are edited later, parent calls rescheduleTransition().
+    const initialDelay = Math.max(0, (exitSec - entrySec) * 1000)
     if (crossfadeTimerRef.current) clearTimeout(crossfadeTimerRef.current)
-    const delay = Math.max(0, (exitSec - entrySec) * 1000)
     crossfadeTimerRef.current = setTimeout(() => {
-      // Will be triggered by the parent if next deck is loaded
-      // Just ramp out deck A — parent handles starting deck B
       const g = decks.current[deck].gain
-      if (g) {
-        g.gain.cancelScheduledValues(ctx.currentTime)
-        g.gain.setValueAtTime(g.gain.value, ctx.currentTime)
-        g.gain.linearRampToValueAtTime(0, ctx.currentTime + fadeSecs)
-      }
-    }, delay)
+      if (!g) return
+      g.gain.cancelScheduledValues(ctx.currentTime)
+      g.gain.setValueAtTime(g.gain.value, ctx.currentTime)
+      g.gain.linearRampToValueAtTime(0, ctx.currentTime + fadeSecs)
+    }, initialDelay)
   }, [getCtx, _startDeck, startTicker])
 
   const crossfadeNow = useCallback((entrySec: number, fadeSecs: number) => {
     const ctx = getCtx()
+    if (crossfadeTimerRef.current) {
+      clearTimeout(crossfadeTimerRef.current)
+      crossfadeTimerRef.current = null
+    }
     const outDeck = activeDeckRef.current
     const inDeck: ActiveDeck = outDeck === 'A' ? 'B' : 'A'
 
@@ -262,5 +289,14 @@ export function useAudioEngine(): AudioEngine {
     }
   }, [stopTicker])
 
-  return { state, loadDeck, play, crossfadeNow, stop, resume, getElapsed }
+  return {
+    state,
+    loadDeck,
+    play,
+    crossfadeNow,
+    rescheduleTransition,
+    stop,
+    resume,
+    getElapsed,
+  }
 }

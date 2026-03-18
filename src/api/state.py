@@ -18,7 +18,7 @@ import pickle
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 
@@ -138,6 +138,7 @@ class AppState:
         self,
         track: Track,
         weights: Optional[Dict[str, float]] = None,
+        play_length: Literal["short", "medium", "long"] = "medium",
     ) -> Tuple[float, float, str, List[float], List[float]]:
         """
         Returns (entry_sec, exit_sec, method, score_in_list, score_out_list).
@@ -147,9 +148,101 @@ class AppState:
         weights (optional): per-feature multipliers for future model tuning,
             e.g. {"energy": 1.5, "bass": 0.8}.  Currently reserved and not
             applied to the scoring logic.
+        play_length: desired body-length profile for entry→exit playback.
         """
         bars = track.bars
         n    = len(bars)
+
+        def _profile_window(track_len: float) -> Tuple[float, float]:
+            """Return (min_body_sec, max_body_sec) for selected play-length.
+            Bounds are adapted for short tracks so we still cover most of song."""
+            max_practical = max(20.0, track_len * 0.92)
+
+            if play_length == "short":
+                req_min, req_max = 90.0, 150.0
+            elif play_length == "long":
+                req_min, req_max = 180.0, None
+            else:
+                req_min, req_max = 150.0, 180.0
+
+            min_body = max(20.0, min(req_min, track_len * 0.8))
+
+            if req_max is None:
+                max_body = max_practical
+            else:
+                max_body = min(req_max, max_practical)
+
+            if max_body <= min_body:
+                min_body = max(20.0, min(min_body, max_practical * 0.75))
+                max_body = max(min_body + 5.0, max_practical)
+
+            return min_body, max_body
+
+        def _choose_pair_with_profile(
+            bars_arr: np.ndarray,
+            entry_scores: np.ndarray,
+            exit_scores: np.ndarray,
+            entry_idx: int,
+            exit_idx: int,
+        ) -> Tuple[int, int]:
+            """Adjust cue pair to profile, prioritising exit movement over entry."""
+            if len(bars_arr) < 2:
+                return entry_idx, exit_idx
+
+            track_len = max(float(bars_arr[-1] - bars_arr[0]), 1.0)
+            min_body, max_body = _profile_window(track_len)
+
+            entry_sec = float(bars_arr[entry_idx])
+            body_secs = float(bars_arr[exit_idx] - bars_arr[entry_idx])
+            if min_body <= body_secs <= max_body:
+                return entry_idx, exit_idx
+
+            # Pass 1: keep entry fixed and move exit only.
+            d_from_entry = bars_arr - entry_sec
+            exit_mask = (d_from_entry >= min_body) & (d_from_entry <= max_body)
+            exit_cands = np.where(exit_mask)[0]
+            if exit_cands.size > 0:
+                best_exit = int(exit_cands[np.argmax(exit_scores[exit_cands])])
+                return entry_idx, best_exit
+
+            # Pass 2: allow limited entry movement, heavily penalised.
+            max_entry_shift = max(4, int(len(bars_arr) * 0.08))
+            lo = max(0, entry_idx - max_entry_shift)
+            hi = min(len(bars_arr), entry_idx + max_entry_shift + 1)
+
+            best_pair: Optional[Tuple[int, int]] = None
+            best_score = -np.inf
+
+            for candidate_entry in range(lo, hi):
+                d = bars_arr - float(bars_arr[candidate_entry])
+                mask = (d >= min_body) & (d <= max_body)
+                valid_exit = np.where(mask)[0]
+                if valid_exit.size == 0:
+                    continue
+
+                candidate_exit = int(valid_exit[np.argmax(exit_scores[valid_exit])])
+
+                entry_move_penalty = 0.30 * abs(candidate_entry - entry_idx) / max(len(bars_arr), 1)
+                exit_move_penalty = 0.08 * abs(candidate_exit - exit_idx) / max(len(bars_arr), 1)
+                pair_score = (
+                    0.35 * float(entry_scores[candidate_entry])
+                    + 0.65 * float(exit_scores[candidate_exit])
+                    - entry_move_penalty
+                    - exit_move_penalty
+                )
+
+                if pair_score > best_score:
+                    best_score = pair_score
+                    best_pair = (candidate_entry, candidate_exit)
+
+            if best_pair is not None:
+                return best_pair
+
+            # Final fallback: preserve entry and pick the furthest feasible exit.
+            target_exit_sec = min(float(bars_arr[-1]), entry_sec + max_body)
+            fallback_exit = int(np.argmin(np.abs(bars_arr - target_exit_sec)))
+            fallback_exit = max(fallback_exit, min(len(bars_arr) - 1, entry_idx + 1))
+            return entry_idx, fallback_exit
 
         def _norm(v: np.ndarray) -> List[float]:
             lo, hi = float(v.min()), float(v.max())
@@ -184,6 +277,14 @@ class AppState:
                 xb = int(np.argmax(s_out_weighted))
                 xb = min(xb, n - 1)
 
+                eb, xb = _choose_pair_with_profile(
+                    bars_arr=bars,
+                    entry_scores=s_in,
+                    exit_scores=s_out_weighted,
+                    entry_idx=eb,
+                    exit_idx=xb,
+                )
+
                 entry_sec = float(bars[eb])
                 exit_sec  = float(bars[xb])
 
@@ -192,7 +293,8 @@ class AppState:
                 track_start = float(bars[0])
                 track_end   = float(bars[-1])
                 time_range  = max(track_end - track_start, 1.0)
-                min_sep     = min(90.0, time_range * 0.4)
+                min_body, _ = _profile_window(time_range)
+                min_sep     = min(min_body, time_range * 0.92)
 
                 if (
                     entry_sec < track_start + time_range * 0.5
@@ -220,6 +322,16 @@ class AppState:
                 else:
                     xb = int(np.argmax(mask))
                 xb = min(xb, n - 1)
+
+                eb, xb = _choose_pair_with_profile(
+                    bars_arr=bars,
+                    entry_scores=s_in,
+                    exit_scores=s_out_weighted,
+                    entry_idx=eb,
+                    exit_idx=xb,
+                )
+
+                entry_sec = float(bars[eb])
                 exit_sec = float(bars[xb])
                 return entry_sec, exit_sec, "model", _norm(s_in), _norm(s_out)
 
@@ -242,9 +354,11 @@ class AppState:
         eb = int(np.argmin(np.abs(bars - entry_target)))
         xb = int(np.argmin(np.abs(bars - exit_target)))
 
-        min_sep_secs = min(90.0, time_range * 0.5)
+        min_sep_secs, max_body_secs = _profile_window(time_range)
         while float(bars[xb]) - float(bars[eb]) < min_sep_secs and xb < n - 1:
             xb += 1
+        while float(bars[xb]) - float(bars[eb]) > max_body_secs and xb > eb + 1:
+            xb -= 1
 
         flat = [0.0] * n
         return float(bars[eb]), float(bars[xb]), "heuristic", flat, flat
