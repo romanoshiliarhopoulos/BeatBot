@@ -112,8 +112,14 @@ const adaptCuesToPlayLength = (
     return { entrySec: pred.entry_sec, exitSec: pred.exit_sec };
   }
 
-  const scoreIn = Array.from({ length: bars.length }, (_, i) => pred.score_in?.[i] ?? 0);
-  const scoreOutRaw = Array.from({ length: bars.length }, (_, i) => pred.score_out?.[i] ?? 0);
+  const scoreIn = Array.from(
+    { length: bars.length },
+    (_, i) => pred.score_in?.[i] ?? 0,
+  );
+  const scoreOutRaw = Array.from(
+    { length: bars.length },
+    (_, i) => pred.score_out?.[i] ?? 0,
+  );
 
   const duration = Math.max(1, bars[bars.length - 1] - bars[0]);
   const { minBody, maxBody } = getPlayWindow(duration, profile);
@@ -171,9 +177,10 @@ const adaptCuesToPlayLength = (
 
       const inScore = entryScoresWeighted[e] ?? 0;
       const outScore = exitScoresWeighted[x] ?? 0;
-      const entryPenalty = 0.32 * Math.abs(e - baseEntry) / bars.length;
-      const exitPenalty = 0.08 * Math.abs(x - baseExit) / bars.length;
-      const pairScore = 0.35 * inScore + 0.65 * outScore - entryPenalty - exitPenalty;
+      const entryPenalty = (0.32 * Math.abs(e - baseEntry)) / bars.length;
+      const exitPenalty = (0.08 * Math.abs(x - baseExit)) / bars.length;
+      const pairScore =
+        0.35 * inScore + 0.65 * outScore - entryPenalty - exitPenalty;
 
       if (pairScore > bestPairScore) {
         bestPairScore = pairScore;
@@ -187,8 +194,14 @@ const adaptCuesToPlayLength = (
     return { entrySec: bars[bestEntry], exitSec: bars[bestPairExit] };
   }
 
-  const fallbackExitTarget = Math.min(bars[bars.length - 1], bars[baseEntry] + maxBody);
-  const fallbackExit = Math.max(baseEntry + 1, nearestIndex(bars, fallbackExitTarget));
+  const fallbackExitTarget = Math.min(
+    bars[bars.length - 1],
+    bars[baseEntry] + maxBody,
+  );
+  const fallbackExit = Math.max(
+    baseEntry + 1,
+    nearestIndex(bars, fallbackExitTarget),
+  );
   return { entrySec: bars[baseEntry], exitSec: bars[fallbackExit] };
 };
 
