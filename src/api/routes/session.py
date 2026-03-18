@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
 
+from api.auth import verify_token
 from api.state import app_state
 from api.ws_manager import manager
 
@@ -19,7 +20,7 @@ router = APIRouter()
 
 
 @router.websocket("/ws/session")
-async def ws_session(websocket: WebSocket):
+async def ws_session(websocket: WebSocket, token: str = ""):
     """
     Persistent WebSocket session.
 
@@ -32,7 +33,18 @@ async def ws_session(websocket: WebSocket):
         { "type": "ping" }
             Keepalive.  Server replies { "type": "pong" }.
     """
-    await manager.connect(websocket)
+    await websocket.accept()
+
+    try:
+        # Verify the token sent as a query parameter
+        uid = verify_token(f"Bearer {token}") if token else verify_token("")
+    except HTTPException:
+        await websocket.close(code=1008)
+        return
+
+    # Now that we know who this is, connect them correctly
+    await manager.connect(websocket, uid)
+    
     try:
         while True:
             data = await websocket.receive_json()
@@ -40,11 +52,13 @@ async def ws_session(websocket: WebSocket):
 
             if msg_type == "client.position":
                 elapsed = float(data.get("elapsed_sec", 0.0))
-                app_state.playback.elapsed_sec = elapsed
+                
+                user_state = app_state.get_user_state(uid)
+                user_state.playback.elapsed_sec = elapsed
 
                 # Find current queue entry
-                ci = app_state.current_index
-                q  = app_state.queue
+                ci = user_state.current_index
+                q  = user_state.queue
                 if 0 <= ci < len(q):
                     entry = q[ci]
                     t = app_state.track_registry.get(entry.track_id)
@@ -52,8 +66,8 @@ async def ws_session(websocket: WebSocket):
                     progress = min(elapsed / duration, 1.0) if duration > 0 else 0.0
                     transition_in = max(0.0, entry.exit_sec - elapsed)
 
-                    # Broadcast playback tick to all clients
-                    await manager.broadcast({
+                    # Broadcast playback tick to all clients for this user
+                    await manager.broadcast_to_user(uid, {
                         "type":                   "playback.tick",
                         "track_id":               entry.track_id,
                         "elapsed_sec":            round(elapsed, 2),
@@ -73,4 +87,4 @@ async def ws_session(websocket: WebSocket):
     except Exception as exc:
         log.error("WS session error: %s", exc)
     finally:
-        manager.disconnect(websocket)
+        manager.disconnect(websocket, uid)

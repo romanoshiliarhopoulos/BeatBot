@@ -44,6 +44,7 @@ try:
     class ImportRequest(_BaseModel):
         video_id: str
         title: str
+        id_token: str | None = None
 
     class ConfigUpdate(_BaseModel):
         music_dir: str
@@ -223,7 +224,7 @@ def create_app(api_url: str, get_id_token_fn: Callable[[], str]) -> Any:
         track_id = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", body.title).strip()[:100]
         if not track_id:
             track_id = body.video_id
-        asyncio.create_task(_run_import(body.video_id, track_id))
+        asyncio.create_task(_run_import(body.video_id, track_id, body.id_token))
         return {"ok": True, "track_id": track_id}
 
     # ── /ws ──────────────────────────────────────────────────────────────────
@@ -243,7 +244,7 @@ def create_app(api_url: str, get_id_token_fn: Callable[[], str]) -> Any:
 
     # ── background import job ─────────────────────────────────────────────────
 
-    async def _run_import(video_id: str, track_id: str) -> None:
+    async def _run_import(video_id: str, track_id: str, client_id_token: str | None = None) -> None:
         loop = asyncio.get_event_loop()
 
         async def emit(status: str, **extra) -> None:
@@ -369,11 +370,11 @@ def create_app(api_url: str, get_id_token_fn: Callable[[], str]) -> Any:
 
         try:
             try:
-                id_token = get_id_token_fn()
+                id_token = client_id_token or get_id_token_fn()
             except SystemExit:
                 await emit(
                     "error",
-                    message="Not logged in. Run: beatbot login",
+                    message="Not logged in. You must be logged in to import.",
                 )
                 return
             pkl = pickle.dumps(track)

@@ -29,12 +29,17 @@ deploy-front:
 # After changing beatbot/cli.py, beatbot/extractor/, or beatbot/track.py:
 #
 #   1. Bump version in pyproject.toml
-#   2. poetry build
-#   3. twine upload dist/*.whl dist/*.tar.gz
+#   2. make publish
+
+install-local:
+	pip install -e ".[daemon]"
+	@echo "BeatBot CLI installed locally. Try running 'beatbot daemon'"
+
+.PHONY: install-local
 
 publish:
 	rm -rf dist/
 	poetry build
-	/Library/Frameworks/Python.framework/Versions/3.11/bin/python3 -m twine upload dist/*.whl dist/*.tar.gz
+	poetry run twine upload dist/*.whl dist/*.tar.gz
 
 .PHONY: publish

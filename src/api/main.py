@@ -150,7 +150,7 @@ def health():
         "tracks":       len(app_state.track_registry),
         "model":        app_state.model is not None,
         "model_version": app_state.model_version,
-        "queue":        len(app_state.queue),
+        "queues_total_tracks": sum(len(u.queue) for u in app_state.users.values()),
         "ws_clients":   __import__("api.ws_manager", fromlist=["manager"]).manager.connection_count,
     }
 
