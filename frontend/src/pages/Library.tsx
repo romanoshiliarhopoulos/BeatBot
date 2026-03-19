@@ -16,6 +16,7 @@ import {
   deleteTrack,
   purgeTracks,
   clearAllTracks,
+  uploadLocal,
 } from "../api/client";
 import { useFolders } from "../contexts/FolderContext";
 import { useMixes } from "../contexts/MixContext";
@@ -864,6 +865,24 @@ function LibraryManageView({ onBack }: { onBack: () => void }) {
   const [clearing, setClearing] = useState(false);
   const [lastPurge, setLastPurge] = useState<number | null>(null);
 
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+
+  async function handleAddLocal(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadProgress(0);
+    try {
+      await uploadLocal(file, (p) => setUploadProgress(p));
+      qc.invalidateQueries({ queryKey: ["tracks"] });
+      qc.invalidateQueries({ queryKey: ["featureIds"] });
+    } catch (err: any) {
+      alert("Upload failed: " + (err.message || "Unknown error"));
+    } finally {
+      setUploadProgress(null);
+      e.target.value = "";
+    }
+  }
+
   async function handleDelete(trackId: string) {
     if (!confirm(`Delete "${trackId}" from your library?`)) return;
     setDeleting((s) => new Set(s).add(trackId));
@@ -951,6 +970,10 @@ function LibraryManageView({ onBack }: { onBack: () => void }) {
               Removed {lastPurge} entr{lastPurge !== 1 ? "ies" : "y"}
             </span>
           )}
+          <label className="px-3 py-1.5 rounded bg-purple-600 border border-purple-500 text-xs text-white hover:bg-purple-500 cursor-pointer transition-colors">
+            {uploadProgress !== null ? `Uploading: ${uploadProgress}%` : "Add local music"}
+            <input type="file" accept="audio/mpeg" className="hidden" disabled={uploadProgress !== null} onChange={handleAddLocal} />
+          </label>
           <button
             onClick={handleClearAll}
             disabled={clearing || library.length === 0}
