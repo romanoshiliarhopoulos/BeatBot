@@ -1151,7 +1151,9 @@ export default function Library() {
           setUploadTasks((prev) =>
             prev.map((t) => (t.id === taskId ? { ...t, progress: p } : t)),
           );
-          const overallProgress = Math.round(((i + p / 100) / totalFiles) * 100);
+          const overallProgress = Math.round(
+            ((i + p / 100) / totalFiles) * 100,
+          );
           setUploadProgress(overallProgress);
         });
         await saveDownloadedTrack(meta.track_id, file);
