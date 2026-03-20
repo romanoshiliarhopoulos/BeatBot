@@ -165,12 +165,12 @@ export function FolderProvider({ children }: { children: ReactNode }) {
         await (window as any).showDirectoryPicker({ mode: "readwrite" });
       const id = crypto.randomUUID();
       const stored: StoredFolder = { id, name: handle.name, handle };
-      
+
       // Clear out old folders (enforce single folder)
       for (const f of folders) {
         await removeFolderHandle(f.id);
       }
-      
+
       await saveFolderHandle(stored);
       const nextFolders = [stored];
       setFolders(nextFolders);
@@ -182,20 +182,25 @@ export function FolderProvider({ children }: { children: ReactNode }) {
     }
   }, [folders]);
 
-  const saveDownloadedTrack = useCallback(async (trackId: string, blob: Blob) => {
-    if (folders.length === 0) throw new Error("No folder linked");
-    const folder = folders[0];
-    
-    // FileSystemWritableFileStream is standard but sometimes missing in TS
-    const fileHandle = await folder.handle.getFileHandle(`${trackId}.mp3`, { create: true });
-    // @ts-ignore
-    const writable = await fileHandle.createWritable();
-    await writable.write(blob);
-    await writable.close();
-    
-    // Refresh to see the newly saved file
-    await doScan(folders, setTracks);
-  }, [folders]);
+  const saveDownloadedTrack = useCallback(
+    async (trackId: string, blob: Blob) => {
+      if (folders.length === 0) throw new Error("No folder linked");
+      const folder = folders[0];
+
+      // FileSystemWritableFileStream is standard but sometimes missing in TS
+      const fileHandle = await folder.handle.getFileHandle(`${trackId}.mp3`, {
+        create: true,
+      });
+      // @ts-ignore
+      const writable = await fileHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+
+      // Refresh to see the newly saved file
+      await doScan(folders, setTracks);
+    },
+    [folders],
+  );
 
   const removeFolder = useCallback(
     async (id: string) => {
