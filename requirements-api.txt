@@ -1,0 +1,14 @@
+# API server dependencies only.
+# Extraction runs locally via the CLI (src/cli.py) — librosa is not needed here.
+
+numpy>=1.26.0,<2.4.0
+pandas>=2.2.0,<3.0.0
+scikit-learn>=1.4.0
+lightgbm>=4.6.0,<5.0.0
+fastapi>=0.115.0,<1.0.0
+uvicorn[standard]>=0.30.0,<1.0.0
+firebase-admin>=6.5.0,<7.0.0
+python-multipart
+librosa
+yt-dlp
+tqdm
