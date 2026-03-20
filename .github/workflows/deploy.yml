@@ -33,7 +33,7 @@ jobs:
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+          firebaseServiceAccount: ${{ secrets.GCP_CREDENTIALS }}
           channelId: live
           projectId: beatbot-35280
 
