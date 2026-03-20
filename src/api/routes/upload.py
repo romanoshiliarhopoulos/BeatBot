@@ -10,10 +10,33 @@ from fastapi.responses import FileResponse
 from api.auth import DEV_UID, verify_token
 from api.firestore_client import set_features, set_library_track
 from api.state import app_state
+from api.schemas import TrackMeta
+import pickle
 
 from extractor.extractor import Extractor
 
 router = APIRouter()
+
+def make_track_meta(t):
+    _NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+    key_name = None
+    
+    
+    if t.key_tonic is not None and t.key_scale is not None:
+        note = _NOTE_NAMES[t.key_tonic % 12]
+        key_name = f"{note}{'m' if t.key_scale == 'minor' else ''}"
+    collection = "m-djcue" if t.source.upper().replace("_", "-") == "M-DJCUE" else "custom"
+    
+    return TrackMeta(
+        track_id=t.track_id,
+        duration=t.duration,
+        tempo=t.tempo,
+        key=key_name,
+        camelot=t.camelot_code,
+        num_bars=t.num_bars,
+        has_cue_labels=t.has_cue_labels,
+        collection=collection,
+    )
 
 def sanitize_track_id(title: str) -> str:
     return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", title).strip()[:100]
@@ -39,13 +62,13 @@ async def upload_local(
         track = ex.extract(tmp_path, track_id=track_id)
         
         # Save to DB
-        set_features(track)
-        set_library_track(uid, track)
+        set_features(uid, track_id, pickle.dumps(track))
+        set_library_track(uid, track_id, make_track_meta(track).model_dump())
         
         # Local registry
-        app_state.track_registry[track_id] = track.to_meta()
+        app_state.track_registry[track_id] = track
         
-        return track.to_meta().model_dump()
+        return make_track_meta(track).model_dump()
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
@@ -87,13 +110,13 @@ async def upload_youtube(
 
     try:
         ex = Extractor(enable_vocal_separation=False)
-        track = ex.extract(out_path, track_id=track_id)
+        track = ex.extract(str(out_path), track_id=track_id)
         
         # Save to DB
-        set_features(track)
-        set_library_track(uid, track)
+        set_features(uid, track_id, pickle.dumps(track))
+        set_library_track(uid, track_id, make_track_meta(track).model_dump())
         
-        app_state.track_registry[track_id] = track.to_meta()
+        app_state.track_registry[track_id] = track
         
         # Return the mp3 file for download.
         return FileResponse(
@@ -102,6 +125,8 @@ async def upload_youtube(
             headers={"Content-Disposition": f'attachment; filename="{track_id}.mp3"'}
         )
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         if os.path.exists(out_path):
             os.remove(out_path)
         raise HTTPException(status_code=500, detail=str(e))
@@ -113,12 +138,13 @@ async def search_youtube(q: str):
         "format": "bestaudio/best",
         "quiet": True,
         "extract_flat": True,
-        "default_search": "ytsearch5",
+        "default_search": "ytsearch20",
     }
     try:
         import yt_dlp
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            res = ydl.extract_info(q, download=False)
+            search_query = f"ytsearch20:{q}" if not q.startswith(("http", "ytsearch")) else q
+            res = ydl.extract_info(search_query, download=False)
             if "entries" in res:
                 return [{"video_id": e["id"], "title": e["title"], "channel": e.get("uploader"), "duration": e.get("duration"), "url": e["url"]} for e in res["entries"]]
             return []

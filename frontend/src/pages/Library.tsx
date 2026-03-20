@@ -424,22 +424,20 @@ function MixGrid({
   onOpenLibrary,
   onOpenMix,
   onCreateMix,
+  uploadProgress,
+  onAddLocal,
 }: {
   mixes: Mix[];
   library: TrackMeta[];
   onOpenLibrary: () => void;
   onOpenMix: (id: string) => void;
   onCreateMix: () => void;
+  uploadProgress: number | null;
+  onAddLocal: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
-  const [sort, setSort] = useState<"recent" | "name" | "size">("recent");
-
   console.log("[MixGrid] render — mixes count:", mixes.length, mixes);
 
-  const sortedMixes = [...mixes].sort((a, b) => {
-    if (sort === "name") return a.name.localeCompare(b.name);
-    if (sort === "size") return b.trackIds.length - a.trackIds.length;
-    return b.createdAt - a.createdAt;
-  });
+  const sortedMixes = [...mixes].sort((a, b) => b.createdAt - a.createdAt);
 
   const libDur = fmtTotal(
     library.map((t) => t.track_id),
@@ -448,26 +446,23 @@ function MixGrid({
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {mixes.length > 1 && (
-        <div className="flex items-center gap-2 px-6 pt-4 pb-1 shrink-0">
-          <span className="text-[10px] uppercase tracking-widest text-gray-600 font-semibold mr-1">
-            Sort
-          </span>
-          {(["recent", "name", "size"] as const).map((s) => (
-            <button
-              key={s}
-              onClick={() => setSort(s)}
-              className={`px-2.5 py-1 rounded text-[11px] transition-colors ${
-                sort === s
-                  ? "bg-purple-600/30 text-purple-300"
-                  : "text-gray-600 hover:text-gray-400"
-              }`}
-            >
-              {s === "recent" ? "Recent" : s === "name" ? "Name" : "Size"}
-            </button>
-          ))}
+      <div className="flex items-center gap-2 px-6 pt-4 pb-1 shrink-0">
+        <div className="ml-auto flex items-center gap-2">
+          <label className="px-3 py-1.5 rounded bg-purple-600 border border-purple-500 text-xs text-white hover:bg-purple-500 cursor-pointer transition-colors">
+            {uploadProgress !== null
+              ? `Uploading: ${uploadProgress}%`
+              : "Add music from device"}
+            <input
+              type="file"
+              accept="audio/mpeg"
+              multiple
+              className="hidden"
+              disabled={uploadProgress !== null}
+              onChange={onAddLocal}
+            />
+          </label>
         </div>
-      )}
+      </div>
       <div className="flex-1 overflow-y-auto px-6 pb-6 pt-2">
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
           <MixCard
@@ -865,24 +860,6 @@ function LibraryManageView({ onBack }: { onBack: () => void }) {
   const [clearing, setClearing] = useState(false);
   const [lastPurge, setLastPurge] = useState<number | null>(null);
 
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-
-  async function handleAddLocal(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadProgress(0);
-    try {
-      await uploadLocal(file, (p) => setUploadProgress(p));
-      qc.invalidateQueries({ queryKey: ["tracks"] });
-      qc.invalidateQueries({ queryKey: ["featureIds"] });
-    } catch (err: any) {
-      alert("Upload failed: " + (err.message || "Unknown error"));
-    } finally {
-      setUploadProgress(null);
-      e.target.value = "";
-    }
-  }
-
   async function handleDelete(trackId: string) {
     if (!confirm(`Delete "${trackId}" from your library?`)) return;
     setDeleting((s) => new Set(s).add(trackId));
@@ -970,10 +947,6 @@ function LibraryManageView({ onBack }: { onBack: () => void }) {
               Removed {lastPurge} entr{lastPurge !== 1 ? "ies" : "y"}
             </span>
           )}
-          <label className="px-3 py-1.5 rounded bg-purple-600 border border-purple-500 text-xs text-white hover:bg-purple-500 cursor-pointer transition-colors">
-            {uploadProgress !== null ? `Uploading: ${uploadProgress}%` : "Add local music"}
-            <input type="file" accept="audio/mpeg" className="hidden" disabled={uploadProgress !== null} onChange={handleAddLocal} />
-          </label>
           <button
             onClick={handleClearAll}
             disabled={clearing || library.length === 0}
@@ -1113,17 +1086,107 @@ type ModalIntent =
   | { mode: "edit"; mixId: string }
   | { mode: "merge"; mixId: string };
 
+type UploadTaskStatus = "queued" | "uploading" | "done" | "error";
+
+interface UploadTask {
+  id: string;
+  filename: string;
+  progress: number;
+  status: UploadTaskStatus;
+  error?: string;
+}
+
 export default function Library() {
   const { mixes, createMix, updateMix, deleteMix, duplicateMix } = useMixes();
   const [view, setView] = useState<View>("grid");
   const [activeMixId, setActiveMixId] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalIntent | null>(null);
 
+  const qc = useQueryClient();
+  const { folders, saveDownloadedTrack } = useFolders();
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
+
   const { data: library = [] } = useQuery<TrackMeta[]>({
     queryKey: ["tracks"],
     queryFn: fetchTracks,
     staleTime: 0,
   });
+
+  async function handleAddLocal(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    if (folders.length === 0) {
+      alert(
+        "Please link a local folder in DJ Environment before adding music.",
+      );
+      e.target.value = "";
+      return;
+    }
+
+    setUploadProgress(0);
+    const totalFiles = files.length;
+    let successCount = 0;
+
+    const newTasks: UploadTask[] = Array.from(files).map((f) => ({
+      id: f.name + Date.now().toString(),
+      filename: f.name,
+      progress: 0,
+      status: "queued",
+    }));
+
+    setUploadTasks((prev) => [...prev, ...newTasks]);
+
+    for (let i = 0; i < totalFiles; i++) {
+      const file = files[i];
+      const taskId = newTasks[i].id;
+
+      setUploadTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, status: "uploading" } : t)),
+      );
+
+      try {
+        const meta = await uploadLocal(file, (p) => {
+          setUploadTasks((prev) =>
+            prev.map((t) => (t.id === taskId ? { ...t, progress: p } : t)),
+          );
+          const baseProgress = Math.floor((i / totalFiles) * 100);
+          const currentFileProgress = Math.floor(p / totalFiles);
+          setUploadProgress(baseProgress + currentFileProgress);
+        });
+        await saveDownloadedTrack(meta.track_id, file);
+        successCount++;
+        setUploadTasks((prev) =>
+          prev.map((t) =>
+            t.id === taskId ? { ...t, status: "done", progress: 100 } : t,
+          ),
+        );
+      } catch (err: any) {
+        console.error(`Upload failed for ${file.name}:`, err);
+        setUploadTasks((prev) =>
+          prev.map((t) =>
+            t.id === taskId
+              ? { ...t, status: "error", error: err.message || "Unknown error" }
+              : t,
+          ),
+        );
+      }
+    }
+
+    qc.invalidateQueries({ queryKey: ["tracks"] });
+    qc.invalidateQueries({ queryKey: ["featureIds"] });
+
+    setUploadProgress(null);
+    e.target.value = "";
+
+    // Automatically dismiss the popup slightly after completely finished
+    setTimeout(() => {
+      setUploadTasks((prev) =>
+        prev.filter((t) => !newTasks.find((n) => n.id === t.id)),
+      );
+    }, 5000);
+  }
 
   function openMix(id: string) {
     setActiveMixId(id);
@@ -1204,6 +1267,8 @@ export default function Library() {
           onOpenLibrary={() => setView("manage")}
           onOpenMix={openMix}
           onCreateMix={() => setModal({ mode: "new" })}
+          uploadProgress={uploadProgress}
+          onAddLocal={handleAddLocal}
         />
       )}
       {view === "manage" && (
@@ -1223,6 +1288,72 @@ export default function Library() {
           }}
           onMerge={() => setModal({ mode: "merge", mixId: activeMix.id })}
         />
+      )}
+
+      {/* Local Upload Progress Popup */}
+      {uploadTasks.length > 0 && (
+        <div className="absolute left-4 bottom-4 w-72 bg-gray-900 border border-white/10 rounded-lg shadow-xl overflow-hidden z-50 flex flex-col pointer-events-auto">
+          <div className="p-3 bg-gray-800 border-b border-white/5 flex items-center justify-between">
+            <h3 className="text-white text-xs font-semibold">
+              Uploading{" "}
+              {
+                uploadTasks.filter(
+                  (t) => t.status === "uploading" || t.status === "queued",
+                ).length
+              }{" "}
+              items
+            </h3>
+            <button
+              onClick={() => setUploadTasks([])}
+              className="text-gray-400 hover:text-white transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="max-h-64 overflow-y-auto p-2 space-y-2">
+            {uploadTasks.map((task) => (
+              <div key={task.id} className="bg-white/5 rounded p-2 text-xs">
+                <div
+                  className="flex justify-between text-gray-300 mb-1.5 mr-2"
+                  title={task.filename}
+                >
+                  <span className="truncate flex-1">{task.filename}</span>
+                  <span className="shrink-0 ml-2">
+                    {task.status === "done" && (
+                      <span className="text-green-400">✓ Done</span>
+                    )}
+                    {task.status === "error" && (
+                      <span className="text-red-400" title={task.error}>
+                        ✗ Error
+                      </span>
+                    )}
+                    {task.status === "queued" && (
+                      <span className="text-gray-500">Queued</span>
+                    )}
+                    {task.status === "uploading" && (
+                      <span className="text-purple-400">
+                        {Math.round(task.progress)}%
+                      </span>
+                    )}
+                  </span>
+                </div>
+                {task.status === "uploading" && (
+                  <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-purple-500 transition-all duration-200"
+                      style={{ width: `${task.progress}%` }}
+                    />
+                  </div>
+                )}
+                {task.status === "error" && (
+                  <div className="text-[10px] text-red-400 mt-1 line-clamp-1 truncate">
+                    {task.error}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

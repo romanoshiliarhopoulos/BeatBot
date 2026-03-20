@@ -42,7 +42,7 @@ import Deck from "../components/Deck";
 import Queue from "../components/Queue";
 import Transport from "../components/Transport";
 import Library from "./Library";
-import Discover from "./Discover";
+import Discover from "./Discover.tsx";
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -723,12 +723,10 @@ export default function DJEnvironment() {
               onClick={addFolder}
               className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px]
                 text-gray-600 hover:text-gray-400 transition-colors"
-              title={`${folders.length} folder${folders.length !== 1 ? "s" : ""} linked — click to add another`}
+              title={`Linked to: ${folders[0].name} — click to change folder`}
             >
               <span className="text-green-500">●</span>
-              <span>
-                {folders.length} folder{folders.length !== 1 ? "s" : ""} linked
-              </span>
+              <span>Linked: {folders[0].name}</span>
             </button>
           )}
 

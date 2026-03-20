@@ -44,6 +44,8 @@ interface FolderContextValue {
   getFile: (key: string) => Promise<File | null>;
   /** Look up a File by track_id (filename without .mp3 extension) */
   getFileByTrackId: (trackId: string) => Promise<File | null>;
+  /** Saves a downloaded blob directly to the linked folder */
+  saveDownloadedTrack: (trackId: string, blob: Blob) => Promise<void>;
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -160,11 +162,17 @@ export function FolderProvider({ children }: { children: ReactNode }) {
       // @ts-ignore – showDirectoryPicker is in the spec but not all TS libs
       const handle: FileSystemDirectoryHandle =
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (window as any).showDirectoryPicker({ mode: "read" });
+        await (window as any).showDirectoryPicker({ mode: "readwrite" });
       const id = crypto.randomUUID();
       const stored: StoredFolder = { id, name: handle.name, handle };
+      
+      // Clear out old folders (enforce single folder)
+      for (const f of folders) {
+        await removeFolderHandle(f.id);
+      }
+      
       await saveFolderHandle(stored);
-      const nextFolders = [...folders, stored];
+      const nextFolders = [stored];
       setFolders(nextFolders);
       await doScan(nextFolders, setTracks);
     } catch (err: unknown) {
@@ -172,6 +180,21 @@ export function FolderProvider({ children }: { children: ReactNode }) {
       if (err instanceof Error && err.name === "AbortError") return;
       console.error("[FolderContext] addFolder failed:", err);
     }
+  }, [folders]);
+
+  const saveDownloadedTrack = useCallback(async (trackId: string, blob: Blob) => {
+    if (folders.length === 0) throw new Error("No folder linked");
+    const folder = folders[0];
+    
+    // FileSystemWritableFileStream is standard but sometimes missing in TS
+    const fileHandle = await folder.handle.getFileHandle(`${trackId}.mp3`, { create: true });
+    // @ts-ignore
+    const writable = await fileHandle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    
+    // Refresh to see the newly saved file
+    await doScan(folders, setTracks);
   }, [folders]);
 
   const removeFolder = useCallback(
@@ -193,6 +216,7 @@ export function FolderProvider({ children }: { children: ReactNode }) {
         removeFolder,
         getFile,
         getFileByTrackId,
+        saveDownloadedTrack,
       }}
     >
       {children}

@@ -1,6 +1,7 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { fetchTracks, searchYoutube, uploadYoutube } from "../api/client";
+import { useFolders } from "../contexts/FolderContext";
 import type { TrackMeta } from "../types";
 
 export interface SearchResult {
@@ -59,6 +60,7 @@ function fmtDuration(secs: number): string {
 
 export default function Discover() {
   const queryClient = useQueryClient();
+  const { saveDownloadedTrack, folders } = useFolders();
   const { data: library = [] } = useQuery<TrackMeta[]>({
     queryKey: ["tracks"],
     queryFn: fetchTracks,
@@ -73,14 +75,20 @@ export default function Discover() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [playingVideo, setPlayingVideo] = useState<SearchResult | null>(null);
 
-  const handleSearch = useCallback(async (e?: React.FormEvent) => {
+  const handleSearch = useCallback(async (e?: React.FormEvent, customQuery?: string) => {
     e?.preventDefault();
-    const q = query.trim();
-    if (!q) return;
+    const q = (customQuery ?? query).trim();
+    if (!q) {
+      setResults([]);
+      return;
+    }
 
     setIsSearching(true);
     try {
+      console.log(`Searching for: ${q}`);
       const res = await searchYoutube(q);
+      console.log('Search response:', res);
+      
       const mapped = res.map((r: any) => ({
         video_id: r.video_id,
         title: r.title,
@@ -89,19 +97,36 @@ export default function Discover() {
         thumbnail: `https://i.ytimg.com/vi/${r.video_id}/mqdefault.jpg`,
         url: r.url
       }));
+      console.log('Mapped results:', mapped);
       setResults(mapped);
     } catch (err) {
       console.error(err);
-      alert("Search failed or YouTube blocked the request.");
+      // alert("Search failed or YouTube blocked the request."); // don't alert on as-you-type failure to avoid annoyance
     } finally {
       setIsSearching(false);
     }
   }, [query]);
 
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (query.trim()) {
+        handleSearch(undefined, query);
+      } else {
+        setResults([]);
+      }
+    }, 500); // 500ms debounce
+    return () => clearTimeout(timeoutId);
+  }, [query, handleSearch]);
+
   const handleImport = useCallback(async (r: SearchResult) => {
     const trackId = toTrackId(r.title) || r.video_id;
 
     if (libraryIds.has(trackId)) return;
+    
+    if (folders.length === 0) {
+      alert("Please link a local folder in your Library before downloading tracks.");
+      return;
+    }
 
     setImportStates(prev => ({
       ...prev,
@@ -111,14 +136,7 @@ export default function Discover() {
     try {
       const blob = await uploadYoutube(r.video_id, r.title);
 
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${trackId}.mp3`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      await saveDownloadedTrack(trackId, blob);
 
       queryClient.invalidateQueries({ queryKey: ["tracks"] });
 
@@ -133,7 +151,7 @@ export default function Discover() {
         [trackId]: { type: "import_progress", track_id: trackId, status: "error", message: err.message ?? "Unknown error" }
       }));
     }
-  }, [libraryIds, queryClient]);
+  }, [libraryIds, queryClient, saveDownloadedTrack, folders]);
 
   function Spinner() {
     return (
@@ -237,7 +255,7 @@ export default function Discover() {
               </div>
               <input type="text" placeholder="Search YouTube to download..." value={query} onChange={(e) => setQuery(e.target.value)} className="w-full bg-white/[0.03] border border-white/[0.07] rounded-lg pl-9 pr-24 py-1.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-purple-500/50 focus:bg-white/[0.05] transition-all" />
               <button type="submit" disabled={isSearching || !query.trim()} className="absolute inset-y-1.5 right-1.5 px-3 rounded text-[10px] font-medium text-white transition-colors flex items-center bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:hover:bg-purple-600">
-                {isSearching ? <Spinner /> : "Search"}
+                Search
               </button>
             </form>
           </div>
