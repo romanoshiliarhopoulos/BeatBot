@@ -1,0 +1,39 @@
+# Git-ignored files
+.git
+.gitignore
+
+# Python virtual environments
+.venv
+venv
+env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Jupyter notebooks and playgrounds
+**/*.ipynb
+**/playgrounds/
+
+# Local data — audio files and raw annotations (large, not needed in image)
+data/custom/audio/
+data/M-DJCUE/audio/
+data/M-DJCUE/annotations/
+data/M-DJCUE/figures/
+
+# Processed track pickles — not needed; model is baked in via data/models/
+data/processed/
+
+# Frontend source — not part of the API image
+frontend/
+
+# Docs
+mds/
+README.md
+
+# Dev tooling
+.env
+.env.local
+*.log
+.DS_Store
