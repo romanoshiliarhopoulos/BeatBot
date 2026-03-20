@@ -170,3 +170,36 @@ export async function apiDeleteMix(id: string): Promise<void> {
   await api.delete(`/mixes/${encodeURIComponent(id)}`)
   console.log('[client] apiDeleteMix ← done')
 }
+
+// ── Upload ─────────────────────────────────────────────────────────────────
+
+export async function uploadYoutube(videoId: string, title: string): Promise<Blob> {
+  const formData = new FormData()
+  formData.append('video_id', videoId)
+  formData.append('title', title)
+  
+  const { data } = await api.post<Blob>('/upload/youtube', formData, {
+    responseType: 'blob'
+  })
+  return data
+}
+
+export async function uploadLocal(file: File, onProgress?: (percent: number) => void): Promise<TrackMeta> {
+  const formData = new FormData()
+  formData.append('file', file)
+  
+  const { data } = await api.post<TrackMeta>('/upload/local', formData, {
+    onUploadProgress: (progressEvent) => {
+      if (progressEvent.total && onProgress) {
+        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+        onProgress(percentCompleted);
+      }
+    }
+  })
+  return data
+}
+
+export async function searchYoutube(q: string): Promise<any[]> {
+  const { data } = await api.get<any[]>('/search/youtube', { params: { q } })
+  return data
+}

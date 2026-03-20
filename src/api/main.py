@@ -45,6 +45,7 @@ from api.routes import (         # noqa: E402
     session,
     tracks,
     transition,
+    upload,
 )
 
 # ── logging ──────────────────────────────────────────────────────────────────
@@ -127,6 +128,7 @@ app.include_router(mixes.router,      tags=["Mixes"])
 app.include_router(predict.router,    tags=["Prediction"])
 app.include_router(cues.router,       tags=["Cues"])
 app.include_router(queue.router,      tags=["Queue"])
+app.include_router(upload.router,     tags=["Upload"])
 # audio.py is intentionally not mounted: audio is served from the browser
 # via the File System Access API (no server-side audio streaming needed).
 app.include_router(transition.router, tags=["Playback"])

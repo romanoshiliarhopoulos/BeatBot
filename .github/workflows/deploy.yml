@@ -1,0 +1,68 @@
+name: Deploy BeatBot
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install Frontend Dependencies
+        working-directory: ./frontend
+        run: pnpm install
+
+      - name: Build Frontend
+        working-directory: ./frontend
+        run: pnpm run build
+
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.GCP_CREDENTIALS }}
+          channelId: live
+          projectId: beatbot-35280
+
+  deploy-backend:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Google Auth
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build Docker Image on GCP
+        run: gcloud builds submit --tag gcr.io/beatbot-35280/beatbot-api .
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy beatbot-api \
+            --image gcr.io/beatbot-35280/beatbot-api \
+            --region us-east4 \
+            --platform managed \
+            --allow-unauthenticated \
+            --memory 1Gi \
+            --min-instances 0 \
+            --set-env-vars CORS_EXTRA_ORIGIN=https://beatbot-35280.web.app

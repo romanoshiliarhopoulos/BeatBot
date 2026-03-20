@@ -62,12 +62,13 @@ export async function verifyHandlePermission(
 ): Promise<boolean> {
   try {
     // @ts-ignore – the permission API is in the spec but not in all TS libs yet
-    const perm = await handle.queryPermission({ mode: "read" });
+    const perm = await handle.queryPermission({ mode: "readwrite" });
     if (perm === "granted") return true;
     // @ts-ignore
-    const req = await handle.requestPermission({ mode: "read" });
+    const req = await handle.requestPermission({ mode: "readwrite" });
     return req === "granted";
   } catch {
     return false;
   }
 }
+
