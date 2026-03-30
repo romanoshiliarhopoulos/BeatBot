@@ -100,8 +100,25 @@ export function useWebSocket(): UseWebSocketReturn {
     isMounted.current = true
     connect()
 
+    // Disconnect when the tab is hidden to avoid Cloud Run billing for idle
+    // WebSocket connections.  Reconnect immediately when the tab is visible again.
+    const onVisibility = () => {
+      if (!isMounted.current) return
+      if (document.hidden) {
+        if (reconnectTimer.current) clearTimeout(reconnectTimer.current)
+        wsRef.current?.close()
+      } else {
+        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+          reconnectDelay.current = RECONNECT_BASE_MS
+          connect()
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+
     return () => {
       isMounted.current = false
+      document.removeEventListener('visibilitychange', onVisibility)
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current)
       wsRef.current?.close()
     }

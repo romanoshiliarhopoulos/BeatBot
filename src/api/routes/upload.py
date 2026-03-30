@@ -110,6 +110,11 @@ async def upload_youtube(
         }],
         "quiet":            True,
         "no_warnings":      True,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "web"]
+            }
+        },
     }
 
     try:
@@ -171,6 +176,11 @@ async def search_youtube(q: str):
         "quiet": True,
         "extract_flat": True,
         "default_search": "ytsearch20",
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "web"]
+            }
+        },
     }
     try:
         search_query = f"ytsearch20:{q}" if not q.startswith(("http", "ytsearch")) else q
