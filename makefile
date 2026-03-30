@@ -8,7 +8,7 @@ deploy:
 	gcloud builds submit --tag gcr.io/beatbot-35280/beatbot-api
 	gcloud run deploy beatbot-api \
 		--image gcr.io/beatbot-35280/beatbot-api \
-		--region us-east4 \
+		--region us-central1 \
 		--platform managed \
 		--allow-unauthenticated \
 		--memory 1Gi \
