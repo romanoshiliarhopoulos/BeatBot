@@ -16,3 +16,4 @@ src/cli_config.py
 build/
 dist/
 *.pyc
+*.pytest_cache/

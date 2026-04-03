@@ -1,4 +1,25 @@
-import type { PlaybackStatus, PlayLengthProfile } from "../types";
+import type {
+  PlaybackStatus,
+  PlayLengthProfile,
+  TransitionType,
+} from "../types";
+
+const TRANSITION_OPTIONS: { value: TransitionType | "auto"; label: string }[] = [
+  { value: "auto", label: "Auto" },
+  { value: "crossfade", label: "Crossfade" },
+  { value: "eq_swap", label: "EQ Swap" },
+  { value: "filter_sweep", label: "Filter" },
+  { value: "echo_out", label: "Echo" },
+  { value: "harmonic_blend", label: "Blend" },
+];
+
+const TRANSITION_LABELS: Record<TransitionType, string> = {
+  crossfade: "Crossfade",
+  eq_swap: "EQ Swap",
+  filter_sweep: "Filter",
+  echo_out: "Echo",
+  harmonic_blend: "Blend",
+};
 
 interface Props {
   status: PlaybackStatus;
@@ -14,6 +35,10 @@ interface Props {
   nextTrack: string | null;
   elapsed: number;
   exitSec: number;
+  transitionType: TransitionType | null;
+  suggestedType: TransitionType | null;
+  transitionOverride: TransitionType | "auto";
+  onTransitionOverrideChange: (value: TransitionType | "auto") => void;
 }
 
 function fmtTime(sec: number): string {
@@ -36,6 +61,10 @@ export default function Transport({
   nextTrack,
   elapsed,
   exitSec,
+  transitionType,
+  suggestedType,
+  transitionOverride,
+  onTransitionOverrideChange,
 }: Props) {
   const isPlaying = status === "playing" || status === "crossfading";
   const isLoading = status === "loading";
@@ -115,7 +144,7 @@ export default function Transport({
         </button>
       )}
 
-      {/* Fade duration */}
+      {/* Controls */}
       <div className="flex items-center gap-2 shrink-0">
         <select
           value={playLength}
@@ -129,13 +158,33 @@ export default function Transport({
           <option value="long">Long</option>
         </select>
 
+        {/* Transition type selector */}
+        <span className="text-gray-600 text-xs">Mix</span>
+        <select
+          value={transitionOverride}
+          onChange={(e) =>
+            onTransitionOverrideChange(
+              e.target.value as TransitionType | "auto",
+            )
+          }
+          className="bg-gray-800 border border-gray-700 text-gray-300 text-xs rounded px-2 py-1"
+        >
+          {TRANSITION_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.value === "auto" && suggestedType
+                ? `Auto (${TRANSITION_LABELS[suggestedType]})`
+                : opt.label}
+            </option>
+          ))}
+        </select>
+
         <span className="text-gray-600 text-xs">Fade</span>
         <select
           value={fadeSecs}
           onChange={(e) => onFadeChange(Number(e.target.value))}
           className="bg-gray-800 border border-gray-700 text-gray-300 text-xs rounded px-2 py-1"
         >
-          {[3, 5, 7, 10, 15].map((s) => (
+          {[7, 10, 15, 20, 25, 30].map((s) => (
             <option key={s} value={s}>
               {s}s
             </option>

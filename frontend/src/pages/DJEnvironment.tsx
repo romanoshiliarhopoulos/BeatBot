@@ -21,6 +21,7 @@ import type {
   TrackMeta,
   PlaybackStatus,
   PlayLengthProfile,
+  TransitionConfig,
 } from "../types";
 import {
   fetchTracks,
@@ -30,6 +31,7 @@ import {
   removeFromQueue,
   reorderQueue,
   clearQueue,
+  suggestTransition,
 } from "../api/client";
 import { useAudioEngine } from "../hooks/useAudioEngine";
 import type { ActiveDeck } from "../hooks/useAudioEngine";
@@ -299,6 +301,42 @@ export default function DJEnvironment() {
   const nextDeck = activeDeck === "A" ? deckB : deckA;
   const nextSet = activeDeck === "A" ? setDeckB : setDeckA;
 
+  // ── transition strategy ────────────────────────────────────────────────
+  // "auto" means use the backend suggestion; anything else is a user override.
+  const [transitionOverride, setTransitionOverride] = useState<TransitionConfig["type"] | "auto">("auto");
+  const [suggestedConfig, setSuggestedConfig] = useState<TransitionConfig | null>(null);
+
+  // Fetch the backend's transition suggestion whenever the deck pair changes.
+  useEffect(() => {
+    if (!nowDeck.track || !nextDeck.track) {
+      setSuggestedConfig(null);
+      return;
+    }
+    let cancelled = false;
+    suggestTransition(
+      nowDeck.track.track_id,
+      nextDeck.track.track_id,
+      nowDeck.exit_sec,
+      nextDeck.entry_sec,
+      fadeSecs,
+    )
+      .then((cfg) => { if (!cancelled) setSuggestedConfig(cfg); })
+      .catch((err) => {
+        console.warn("[DJEnvironment] transition suggest failed:", err);
+        if (!cancelled) setSuggestedConfig(null);
+      });
+    return () => { cancelled = true; };
+  }, [
+    nowDeck.track?.track_id, nowDeck.exit_sec,
+    nextDeck.track?.track_id, nextDeck.entry_sec,
+    fadeSecs,
+  ]);
+
+  const transitionConfig: TransitionConfig | null =
+    !suggestedConfig ? null
+    : transitionOverride === "auto" ? suggestedConfig
+    : { ...suggestedConfig, type: transitionOverride };
+
   // ── load a track into a deck slot ─────────────────────────────────────────
   const loadDeckSlot = useCallback(
     async (slot: ActiveDeck, item: QueueItem, lib: TrackMeta[]) => {
@@ -445,7 +483,7 @@ export default function DJEnvironment() {
       didAutoXfade.current = true;
       if (inactive.track) {
         setPlaybackStatus("crossfading");
-        engine.crossfadeNow(inactive.entry_sec, fadeSecs);
+        engine.crossfadeNow(inactive.entry_sec, fadeSecs, transitionConfig ?? undefined);
         const newActive: ActiveDeck = activeDeck === "A" ? "B" : "A";
         setActiveDeck(newActive);
         const newCursor = queueCursorRef.current + 1;
@@ -456,10 +494,11 @@ export default function DJEnvironment() {
           if (activeDeck === "A") setDeckA(emptyDeck());
           else setDeckB(emptyDeck());
         }
+        const effectiveFade = transitionConfig?.fadeSecs ?? fadeSecs;
         setTimeout(() => {
           setPlaybackStatus("playing");
           didAutoXfade.current = false;
-        }, fadeSecs * 1000);
+        }, effectiveFade * 1000);
       } else {
         didAutoXfade.current = false;
       }
@@ -506,7 +545,7 @@ export default function DJEnvironment() {
   const handleMixNow = useCallback(() => {
     if (!nextDeck.track) return;
     setPlaybackStatus("crossfading");
-    engine.crossfadeNow(nextDeck.entry_sec, fadeSecs);
+    engine.crossfadeNow(nextDeck.entry_sec, fadeSecs, transitionConfig ?? undefined);
     const newActive: ActiveDeck = activeDeck === "A" ? "B" : "A";
     setActiveDeck(newActive);
     const newCursor = queueCursorRef.current + 1;
@@ -518,8 +557,9 @@ export default function DJEnvironment() {
       else setDeckB(emptyDeck());
     }
     didAutoXfade.current = false;
-    setTimeout(() => setPlaybackStatus("playing"), fadeSecs * 1000);
-  }, [engine, nextDeck, activeDeck, fadeSecs, library, loadDeckSlot]);
+    const effectiveFade = transitionConfig?.fadeSecs ?? fadeSecs;
+    setTimeout(() => setPlaybackStatus("playing"), effectiveFade * 1000);
+  }, [engine, nextDeck, activeDeck, fadeSecs, transitionConfig, library, loadDeckSlot]);
 
   // ── queue handlers ────────────────────────────────────────────────────────
   const handleAdd = useCallback(async (trackId: string) => {
@@ -808,6 +848,10 @@ export default function DJEnvironment() {
               nextTrack={nextDeck.track?.track_id ?? null}
               elapsed={engine.state.elapsed}
               exitSec={nowDeck.exit_sec}
+              transitionType={transitionConfig?.type ?? null}
+              suggestedType={suggestedConfig?.type ?? null}
+              transitionOverride={transitionOverride}
+              onTransitionOverrideChange={setTransitionOverride}
             />
           </div>
         </>
