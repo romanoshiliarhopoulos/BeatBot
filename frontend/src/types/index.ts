@@ -87,6 +87,23 @@ export interface Mix {
   createdAt: number
 }
 
+// ── Transition config ─────────────────────────────────────────────────────
+
+export type TransitionType = 'crossfade' | 'eq_swap' | 'filter_sweep' | 'echo_out' | 'harmonic_blend'
+export type CurveType = 'equal_power' | 'linear' | 's_curve'
+
+export interface TransitionConfig {
+  type: TransitionType
+  curve: CurveType
+  fadeSecs: number
+  bassSwapAt?: number | null
+  filterStartHz?: number | null
+  filterEndHz?: number | null
+  delayTimeSec?: number | null
+  delayFeedback?: number | null
+  silenceSec?: number | null
+}
+
 // Local UI state
 export type PlaybackStatus = 'idle' | 'loading' | 'playing' | 'crossfading' | 'paused'
 

@@ -7,6 +7,7 @@ import type {
   CueEditResponse,
   QueueState,
   EarlyTransitionResponse,
+  TransitionConfig,
 } from '../types'
 import { firebaseAuth } from '../lib/firebase'
 
@@ -128,6 +129,37 @@ export async function clearQueue(): Promise<QueueState> {
 }
 
 // ── Transition ────────────────────────────────────────────────────────────
+
+export async function suggestTransition(
+  outTrackId: string,
+  inTrackId: string,
+  outExitSec: number,
+  inEntrySec: number,
+  fadeSecs: number,
+): Promise<TransitionConfig> {
+  // Backend returns snake_case; map to camelCase for frontend types.
+  const { data } = await api.post(
+    '/transition/suggest',
+    {
+      out_track_id: outTrackId,
+      in_track_id: inTrackId,
+      out_exit_sec: outExitSec,
+      in_entry_sec: inEntrySec,
+      fade_secs: fadeSecs,
+    },
+  )
+  return {
+    type: data.type,
+    curve: data.curve,
+    fadeSecs: data.fade_secs,
+    bassSwapAt: data.bass_swap_at ?? null,
+    filterStartHz: data.filter_start_hz ?? null,
+    filterEndHz: data.filter_end_hz ?? null,
+    delayTimeSec: data.delay_time_sec ?? null,
+    delayFeedback: data.delay_feedback ?? null,
+    silenceSec: data.silence_sec ?? null,
+  }
+}
 
 export async function triggerEarlyTransition(
   fadeSecs = 7

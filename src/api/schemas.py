@@ -3,7 +3,7 @@ Pydantic schemas for all BeatBot API request / response bodies.
 """
 from __future__ import annotations
 
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Union
 from pydantic import BaseModel, Field
 
 
@@ -83,6 +83,32 @@ class ReorderRequest(BaseModel):
 
 # ── Transition ────────────────────────────────────────────────────────────────
 
+class TransitionConfig(BaseModel):
+    """Describes *how* a transition should be executed."""
+    type: Literal[
+        "crossfade", "eq_swap", "filter_sweep",
+        "echo_out", "harmonic_blend",
+    ] = "crossfade"
+    curve: Literal["equal_power", "linear", "s_curve"] = "equal_power"
+    fade_secs: float = 7.0
+    bass_swap_at: Optional[float] = None
+    filter_start_hz: Optional[float] = None
+    filter_end_hz: Optional[float] = None
+    delay_time_sec: Optional[float] = None
+    delay_feedback: Optional[float] = None
+    silence_sec: Optional[float] = None
+
+
+class TransitionSuggestRequest(BaseModel):
+    """Sent by the frontend when both decks are loaded to get the backend's
+    recommended transition type."""
+    out_track_id: str
+    in_track_id: str
+    out_exit_sec: float
+    in_entry_sec: float
+    fade_secs: float = 7.0
+
+
 class EarlyTransitionRequest(BaseModel):
     fade_secs: float = 7.0
 
@@ -92,6 +118,7 @@ class EarlyTransitionResponse(BaseModel):
     entry_sec: float
     exit_sec: float
     fade_secs: float
+    transition: Optional[TransitionConfig] = None
 
 
 # ── Playback (sent by browser over WebSocket) ─────────────────────────────────

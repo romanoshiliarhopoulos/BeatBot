@@ -1,138 +1,228 @@
 /**
- * useAudioEngine — Web Audio API two-deck crossfade engine.
+ * useAudioEngine — Web Audio API two-deck transition engine.
  *
- * Architecture:
- *   AudioContext
- *     ├── SourceNode (deckA) → GainNode A → destination
- *     └── SourceNode (deckB) → GainNode B → destination
+ * Per-deck audio graph:
+ *   Source → LowShelf → Peaking → HighShelf → SweepFilter → MasterGain → destination
+ *                                                              └→ Delay → DelayWet → destination
+ *                                                                   └→ Feedback ─┘
  *
- * Decks ping-pong: A plays, B is preloaded. After crossfade, B plays, A is
- * reloaded with the track after next.
+ * All filter/effect nodes default to passthrough. They activate only when
+ * a non-default transition type is selected.
  */
 import { useRef, useState, useCallback, useEffect } from 'react'
+import type { TransitionConfig, CurveType } from '../types'
 
+export type { TransitionConfig } from '../types'
 export type ActiveDeck = 'A' | 'B'
+
+// ── Gain curve keypoints (t → value) ────────────────────────────────────
+
+interface Keypoint { t: number; out: number; in: number }
+
+const EQUAL_POWER: Keypoint[] = [
+  { t: 0,    out: 1,     in: 0     },
+  { t: 0.25, out: 0.924, in: 0.383 },
+  { t: 0.5,  out: 0.707, in: 0.707 },
+  { t: 0.75, out: 0.383, in: 0.924 },
+  { t: 1,    out: 0,     in: 1     },
+]
+
+const S_CURVE: Keypoint[] = [
+  { t: 0,    out: 1,     in: 0     },
+  { t: 0.25, out: 0.844, in: 0.156 },
+  { t: 0.5,  out: 0.5,   in: 0.5   },
+  { t: 0.75, out: 0.156, in: 0.844 },
+  { t: 1,    out: 0,     in: 1     },
+]
+
+const LINEAR: Keypoint[] = [
+  { t: 0, out: 1, in: 0 },
+  { t: 1, out: 0, in: 1 },
+]
+
+function keypoints(curve: CurveType): Keypoint[] {
+  return curve === 's_curve' ? S_CURVE : curve === 'linear' ? LINEAR : EQUAL_POWER
+}
+
+function scheduleFadeOut(p: AudioParam, t0: number, dur: number, curve: CurveType, start = 1) {
+  p.cancelScheduledValues(t0)
+  p.setValueAtTime(start, t0)
+  for (const k of keypoints(curve)) {
+    if (k.t > 0) p.linearRampToValueAtTime(start * k.out, t0 + dur * k.t)
+  }
+}
+
+function scheduleFadeIn(p: AudioParam, t0: number, dur: number, curve: CurveType, end = 1) {
+  p.cancelScheduledValues(t0)
+  p.setValueAtTime(0, t0)
+  for (const k of keypoints(curve)) {
+    if (k.t > 0) p.linearRampToValueAtTime(end * k.in, t0 + dur * k.t)
+  }
+}
+
+// ── Deck reference ──────────────────────────────────────────────────────
 
 interface DeckRef {
   trackId: string | null
   buffer: AudioBuffer | null
   source: AudioBufferSourceNode | null
-  gain: GainNode | null
-  /** audioCtx.currentTime when source.start() was called */
+  // 3-band EQ (chained in series: source → low → peak → high → sweep → master)
+  lowShelf: BiquadFilterNode | null
+  peaking: BiquadFilterNode | null
+  highShelf: BiquadFilterNode | null
+  sweepFilter: BiquadFilterNode | null
+  masterGain: GainNode | null
+  // Delay / echo effect
+  delayNode: DelayNode | null
+  delayFeedback: GainNode | null
+  delayWet: GainNode | null
+  // Timing
   startedAtCtxTime: number
-  /** audio file offset (seconds) we started from */
   startedAtOffset: number
 }
 
 function emptyDeck(): DeckRef {
   return {
-    trackId: null,
-    buffer: null,
-    source: null,
-    gain: null,
-    startedAtCtxTime: 0,
-    startedAtOffset: 0,
+    trackId: null, buffer: null, source: null,
+    lowShelf: null, peaking: null, highShelf: null,
+    sweepFilter: null, masterGain: null,
+    delayNode: null, delayFeedback: null, delayWet: null,
+    startedAtCtxTime: 0, startedAtOffset: 0,
   }
 }
+
+// ── Public types ────────────────────────────────────────────────────────
 
 export interface AudioEngineState {
   isPlaying: boolean
   activeDeck: ActiveDeck
-  elapsed: number         // seconds into the currently playing audio file
+  elapsed: number
   loadingA: boolean
   loadingB: boolean
 }
 
 export interface AudioEngine {
   state: AudioEngineState
-  /** Fetch + decode audio for the given deck without starting playback */
   loadDeck: (deck: ActiveDeck, trackId: string, file?: File) => Promise<void>
-  /** Start playing from entrySec. Schedules auto-crossfade at exitSec. */
   play: (entrySec: number, exitSec: number, fadeSecs: number) => void
-  /** Immediately trigger crossfade to the other deck */
-  crossfadeNow: (entrySec: number, fadeSecs: number) => void
-  /** Re-schedule active deck auto-fade to match updated exit cue */
+  crossfadeNow: (entrySec: number, fadeSecs: number, transition?: TransitionConfig) => void
   rescheduleTransition: (exitSec: number, fadeSecs: number) => void
-  /** Stop all playback */
   stop: () => void
-  /** Resume AudioContext (required after user gesture on some browsers) */
   resume: () => Promise<void>
-  /** Current elapsed seconds */
   getElapsed: () => number
 }
 
+// ── Hook ────────────────────────────────────────────────────────────────
+
 export function useAudioEngine(): AudioEngine {
   const ctxRef = useRef<AudioContext | null>(null)
-  const decks = useRef<{ A: DeckRef; B: DeckRef }>({
-    A: emptyDeck(),
-    B: emptyDeck(),
-  })
+  const decks = useRef<{ A: DeckRef; B: DeckRef }>({ A: emptyDeck(), B: emptyDeck() })
   const activeDeckRef = useRef<ActiveDeck>('A')
   const crossfadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const [state, setState] = useState<AudioEngineState>({
-    isPlaying: false,
-    activeDeck: 'A',
-    elapsed: 0,
-    loadingA: false,
-    loadingB: false,
-  })
-
-  // Ticker: update elapsed every 250ms while playing
   const tickerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  const [state, setState] = useState<AudioEngineState>({
+    isPlaying: false, activeDeck: 'A', elapsed: 0, loadingA: false, loadingB: false,
+  })
+
+  // ── core helpers ─────────────────────────────────────────────────────
+
   const getCtx = useCallback((): AudioContext => {
-    if (!ctxRef.current) {
-      ctxRef.current = new AudioContext()
-    }
+    if (!ctxRef.current) ctxRef.current = new AudioContext()
     return ctxRef.current
   }, [])
 
   const getElapsed = useCallback((): number => {
     const ctx = ctxRef.current
     if (!ctx) return 0
-    const active = decks.current[activeDeckRef.current]
-    if (!active.source) return 0
-    return (ctx.currentTime - active.startedAtCtxTime) + active.startedAtOffset
+    const a = decks.current[activeDeckRef.current]
+    if (!a.source) return 0
+    return Math.max(0, (ctx.currentTime - a.startedAtCtxTime) + a.startedAtOffset)
   }, [])
 
   const startTicker = useCallback(() => {
     if (tickerRef.current) return
     tickerRef.current = setInterval(() => {
-      const el = getElapsed()
-      setState(s => ({ ...s, elapsed: el }))
+      setState(s => ({ ...s, elapsed: getElapsed() }))
     }, 250)
   }, [getElapsed])
 
   const stopTicker = useCallback(() => {
-    if (tickerRef.current) {
-      clearInterval(tickerRef.current)
-      tickerRef.current = null
+    if (tickerRef.current) { clearInterval(tickerRef.current); tickerRef.current = null }
+  }, [])
+
+  // ── build per-deck audio graph ───────────────────────────────────────
+
+  const _ensureGraph = useCallback((deck: ActiveDeck) => {
+    const ctx = getCtx()
+    const d = decks.current[deck]
+    if (d.masterGain) return // already built
+
+    const low = ctx.createBiquadFilter()
+    low.type = 'lowshelf'; low.frequency.value = 300; low.gain.value = 0
+
+    const peak = ctx.createBiquadFilter()
+    peak.type = 'peaking'; peak.frequency.value = 1000; peak.Q.value = 0.7; peak.gain.value = 0
+
+    const high = ctx.createBiquadFilter()
+    high.type = 'highshelf'; high.frequency.value = 3000; high.gain.value = 0
+
+    const sweep = ctx.createBiquadFilter()
+    sweep.type = 'lowpass'; sweep.frequency.value = 20000; sweep.Q.value = 0.7
+
+    const master = ctx.createGain()
+    master.gain.value = 1
+
+    const delay = ctx.createDelay(2.0)
+    delay.delayTime.value = 0.5
+    const fb = ctx.createGain(); fb.gain.value = 0
+    const wet = ctx.createGain(); wet.gain.value = 0
+
+    // EQ chain → sweep → master → destination
+    low.connect(peak); peak.connect(high); high.connect(sweep)
+    sweep.connect(master); master.connect(ctx.destination)
+
+    // Delay path: master → delay → wet → destination  +  delay → fb → delay
+    master.connect(delay); delay.connect(wet); wet.connect(ctx.destination)
+    delay.connect(fb); fb.connect(delay)
+
+    Object.assign(d, {
+      lowShelf: low, peaking: peak, highShelf: high,
+      sweepFilter: sweep, masterGain: master,
+      delayNode: delay, delayFeedback: fb, delayWet: wet,
+    })
+  }, [getCtx])
+
+  // ── reset EQ / effects to passthrough ────────────────────────────────
+
+  const _reset = useCallback((deck: ActiveDeck) => {
+    const ctx = ctxRef.current
+    if (!ctx) return
+    const d = decks.current[deck]
+    const now = ctx.currentTime
+    const zero = (p: AudioParam | undefined) => {
+      if (!p) return; p.cancelScheduledValues(now); p.setValueAtTime(0, now)
+    }
+    zero(d.lowShelf?.gain); zero(d.peaking?.gain); zero(d.highShelf?.gain)
+    zero(d.delayFeedback?.gain); zero(d.delayWet?.gain)
+    if (d.sweepFilter) {
+      d.sweepFilter.frequency.cancelScheduledValues(now)
+      d.sweepFilter.frequency.setValueAtTime(20000, now)
     }
   }, [])
+
+  // ── load deck ────────────────────────────────────────────────────────
 
   const loadDeck = useCallback(async (deck: ActiveDeck, trackId: string, file?: File) => {
     setState(s => deck === 'A' ? { ...s, loadingA: true } : { ...s, loadingB: true })
     const ctx = getCtx()
-
-    // Create/reuse GainNode for this deck
-    if (!decks.current[deck].gain) {
-      const g = ctx.createGain()
-      g.connect(ctx.destination)
-      decks.current[deck].gain = g
-    }
-
+    _ensureGraph(deck)
     try {
-      let arrayBuf: ArrayBuffer
-      if (file) {
-        arrayBuf = await file.arrayBuffer()
-      } else {
-        // No local file available — skip audio decode silently.
-        // The user needs to grant folder access via the Link Folder button.
-        console.warn(`[AudioEngine] No local file for deck ${deck} track "${trackId}" — grant folder access first.`)
+      if (!file) {
+        console.warn(`[AudioEngine] No local file for deck ${deck} track "${trackId}"`)
         return
       }
-      const audioBuf = await ctx.decodeAudioData(arrayBuf)
+      const audioBuf = await ctx.decodeAudioData(await file.arrayBuffer())
       decks.current[deck].buffer = audioBuf
       decks.current[deck].trackId = trackId
     } catch (err) {
@@ -140,146 +230,209 @@ export function useAudioEngine(): AudioEngine {
     } finally {
       setState(s => deck === 'A' ? { ...s, loadingA: false } : { ...s, loadingB: false })
     }
-  }, [getCtx])
+  }, [getCtx, _ensureGraph])
 
-  const _startDeck = useCallback((
-    deck: ActiveDeck,
-    offsetSec: number,
-  ) => {
+  // ── start playback on a deck ─────────────────────────────────────────
+
+  const _startDeck = useCallback((deck: ActiveDeck, offsetSec: number, when?: number) => {
     const ctx = getCtx()
-    const deckRef = decks.current[deck]
-    if (!deckRef.buffer || !deckRef.gain) return
+    const d = decks.current[deck]
+    if (!d.buffer) return
+    if (!d.lowShelf) _ensureGraph(deck)
 
-    // Stop previous source on this deck if still running
-    try { deckRef.source?.stop() } catch { /* already stopped */ }
+    try { d.source?.stop() } catch { /* already stopped */ }
 
-    const source = ctx.createBufferSource()
-    source.buffer = deckRef.buffer
-    source.connect(deckRef.gain)
-    source.start(0, Math.max(0, offsetSec))
+    const src = ctx.createBufferSource()
+    src.buffer = d.buffer
+    src.connect(d.lowShelf!)
+    src.start(when ?? 0, Math.max(0, offsetSec))
 
-    deckRef.source = source
-    deckRef.startedAtCtxTime = ctx.currentTime
-    deckRef.startedAtOffset = offsetSec
-  }, [getCtx])
+    d.source = src
+    d.startedAtCtxTime = when ?? ctx.currentTime
+    d.startedAtOffset = offsetSec
+  }, [getCtx, _ensureGraph])
+
+  // ── execute transition ───────────────────────────────────────────────
+
+  const _exec = useCallback((outDeck: ActiveDeck, inDeck: ActiveDeck, cfg: TransitionConfig) => {
+    const ctx = getCtx()
+    const now = ctx.currentTime
+    const o = decks.current[outDeck]
+    const i = decks.current[inDeck]
+    const { type, curve, fadeSecs } = cfg
+
+    _reset(outDeck)
+    _reset(inDeck)
+
+    switch (type) {
+      // ── EQ Bass Swap ─────────────────────────────────────────────────
+      case 'eq_swap': {
+        if (o.masterGain) scheduleFadeOut(o.masterGain.gain, now, fadeSecs, curve)
+        if (i.masterGain) scheduleFadeIn(i.masterGain.gain, now, fadeSecs, curve)
+
+        // Smooth bass swap: ramp out/in over the middle third of the fade
+        const swapCenter = fadeSecs * (cfg.bassSwapAt ?? 0.3)
+        const rampDur = fadeSecs * 0.3 // 30% of fade for the bass ramp
+        const swapStart = now + Math.max(0, swapCenter - rampDur / 2)
+        const swapEnd = now + swapCenter + rampDur / 2
+        if (o.lowShelf) {
+          o.lowShelf.gain.setValueAtTime(0, now)
+          o.lowShelf.gain.setValueAtTime(0, swapStart)
+          o.lowShelf.gain.linearRampToValueAtTime(-30, swapEnd)
+        }
+        if (i.lowShelf) {
+          i.lowShelf.gain.setValueAtTime(-30, now)
+          i.lowShelf.gain.setValueAtTime(-30, swapStart)
+          i.lowShelf.gain.linearRampToValueAtTime(0, swapEnd)
+        }
+        break
+      }
+
+      // ── Filter Sweep ─────────────────────────────────────────────────
+      case 'filter_sweep': {
+        if (o.masterGain) scheduleFadeOut(o.masterGain.gain, now, fadeSecs, curve)
+        if (i.masterGain) scheduleFadeIn(i.masterGain.gain, now, fadeSecs, curve)
+
+        if (o.sweepFilter) {
+          o.sweepFilter.frequency.setValueAtTime(cfg.filterStartHz ?? 20000, now)
+          o.sweepFilter.frequency.exponentialRampToValueAtTime(
+            Math.max(cfg.filterEndHz ?? 200, 20), now + fadeSecs,
+          )
+        }
+        break
+      }
+
+      // ── Echo / Delay Fade-Out ────────────────────────────────────────
+      case 'echo_out': {
+        if (o.masterGain) scheduleFadeOut(o.masterGain.gain, now, fadeSecs, curve)
+        if (i.masterGain) scheduleFadeIn(i.masterGain.gain, now, fadeSecs, curve)
+
+        if (o.delayNode) o.delayNode.delayTime.setValueAtTime(cfg.delayTimeSec ?? 0.5, now)
+        if (o.delayFeedback) {
+          o.delayFeedback.gain.setValueAtTime(0, now)
+          o.delayFeedback.gain.linearRampToValueAtTime(cfg.delayFeedback ?? 0.5, now + fadeSecs * 0.3)
+        }
+        if (o.delayWet) {
+          o.delayWet.gain.setValueAtTime(0, now)
+          o.delayWet.gain.linearRampToValueAtTime(0.7, now + fadeSecs * 0.5)
+          o.delayWet.gain.linearRampToValueAtTime(0, now + fadeSecs)
+        }
+        break
+      }
+
+      
+      // ── Harmonic Blend / Default Crossfade ───────────────────────────
+      case 'harmonic_blend':
+      case 'crossfade':
+      default: {
+        if (o.masterGain) scheduleFadeOut(o.masterGain.gain, now, fadeSecs, curve, o.masterGain.gain.value)
+        if (i.masterGain) scheduleFadeIn(i.masterGain.gain, now, fadeSecs, curve)
+        break
+      }
+    }
+  }, [getCtx, _reset])
+
+  // ── public: rescheduleTransition ─────────────────────────────────────
 
   const rescheduleTransition = useCallback((exitSec: number, fadeSecs: number) => {
     const ctx = ctxRef.current
-    if (!ctx) return
-    if (!state.isPlaying) return
-
-    const activeDeck = activeDeckRef.current
-    const activeRef = decks.current[activeDeck]
-    if (!activeRef.source) return
+    if (!ctx || !state.isPlaying) return
+    const deck = activeDeckRef.current
+    const d = decks.current[deck]
+    if (!d.source) return
 
     if (crossfadeTimerRef.current) clearTimeout(crossfadeTimerRef.current)
 
-    const elapsedNow = (ctx.currentTime - activeRef.startedAtCtxTime) + activeRef.startedAtOffset
-    const remainingMs = Math.max(0, (exitSec - elapsedNow) * 1000)
+    const elapsed = (ctx.currentTime - d.startedAtCtxTime) + d.startedAtOffset
+    const remainMs = Math.max(0, (exitSec - elapsed) * 1000)
 
     crossfadeTimerRef.current = setTimeout(() => {
-      const g = decks.current[activeDeck].gain
+      const g = decks.current[deck].masterGain
       if (!g) return
-      g.gain.cancelScheduledValues(ctx.currentTime)
-      g.gain.setValueAtTime(g.gain.value, ctx.currentTime)
-      g.gain.linearRampToValueAtTime(0, ctx.currentTime + fadeSecs)
-    }, remainingMs)
+      scheduleFadeOut(g.gain, ctx.currentTime, fadeSecs, 'equal_power', g.gain.value)
+    }, remainMs)
   }, [state.isPlaying])
 
-  const play = useCallback((
-    entrySec: number,
-    exitSec: number,
-    fadeSecs: number,
-  ) => {
+  // ── public: play ─────────────────────────────────────────────────────
+
+  const play = useCallback((entrySec: number, exitSec: number, fadeSecs: number) => {
     const ctx = getCtx()
     const deck = activeDeckRef.current
-    const deckRef = decks.current[deck]
-    if (!deckRef.buffer) {
-      console.warn('[AudioEngine] play() called but deck buffer is empty')
-      return
-    }
+    _ensureGraph(deck)
+    const d = decks.current[deck]
+    if (!d.buffer) { console.warn('[AudioEngine] play(): empty buffer'); return }
 
-    // Ensure gain nodes exist and are reset
-    if (!deckRef.gain) {
-      const g = ctx.createGain()
-      g.connect(ctx.destination)
-      deckRef.gain = g
+    _reset(deck)
+    if (d.masterGain) {
+      d.masterGain.gain.cancelScheduledValues(ctx.currentTime)
+      d.masterGain.gain.setValueAtTime(1, ctx.currentTime)
     }
-    deckRef.gain.gain.cancelScheduledValues(ctx.currentTime)
-    deckRef.gain.gain.setValueAtTime(1, ctx.currentTime)
 
     _startDeck(deck, entrySec)
-
     setState(s => ({ ...s, isPlaying: true, activeDeck: deck }))
     startTicker()
 
-    // Schedule auto-fade from the current cue selection.
-    // If cues are edited later, parent calls rescheduleTransition().
-    const initialDelay = Math.max(0, (exitSec - entrySec) * 1000)
+    // backup auto-fade (DJEnvironment also triggers crossfadeNow)
+    const delayMs = Math.max(0, (exitSec - entrySec) * 1000)
     if (crossfadeTimerRef.current) clearTimeout(crossfadeTimerRef.current)
     crossfadeTimerRef.current = setTimeout(() => {
-      const g = decks.current[deck].gain
+      const g = decks.current[deck].masterGain
       if (!g) return
-      g.gain.cancelScheduledValues(ctx.currentTime)
-      g.gain.setValueAtTime(g.gain.value, ctx.currentTime)
-      g.gain.linearRampToValueAtTime(0, ctx.currentTime + fadeSecs)
-    }, initialDelay)
-  }, [getCtx, _startDeck, startTicker])
+      scheduleFadeOut(g.gain, ctx.currentTime, fadeSecs, 'equal_power', g.gain.value)
+    }, delayMs)
+  }, [getCtx, _ensureGraph, _reset, _startDeck, startTicker])
 
-  const crossfadeNow = useCallback((entrySec: number, fadeSecs: number) => {
+  // ── public: crossfadeNow ─────────────────────────────────────────────
+
+  const crossfadeNow = useCallback((
+    entrySec: number,
+    fadeSecs: number,
+    transition?: TransitionConfig,
+  ) => {
     const ctx = getCtx()
     if (crossfadeTimerRef.current) {
       clearTimeout(crossfadeTimerRef.current)
       crossfadeTimerRef.current = null
     }
+
     const outDeck = activeDeckRef.current
     const inDeck: ActiveDeck = outDeck === 'A' ? 'B' : 'A'
+    _ensureGraph(outDeck)
+    _ensureGraph(inDeck)
 
-    // Ensure gain nodes exist
-    const outDeckRef = decks.current[outDeck]
-    const inDeckRef  = decks.current[inDeck]
-
-    if (outDeckRef.gain) {
-      outDeckRef.gain.gain.cancelScheduledValues(ctx.currentTime)
-      outDeckRef.gain.gain.setValueAtTime(outDeckRef.gain.gain.value, ctx.currentTime)
-      outDeckRef.gain.gain.linearRampToValueAtTime(0, ctx.currentTime + fadeSecs)
-    }
-
-    if (!inDeckRef.gain) {
-      const g = ctx.createGain()
-      g.connect(ctx.destination)
-      inDeckRef.gain = g
-    }
-    inDeckRef.gain.gain.cancelScheduledValues(ctx.currentTime)
-    inDeckRef.gain.gain.setValueAtTime(0, ctx.currentTime)
-    inDeckRef.gain.gain.linearRampToValueAtTime(1, ctx.currentTime + fadeSecs)
+    const cfg: TransitionConfig = transition ?? { type: 'crossfade', curve: 'equal_power', fadeSecs }
 
     _startDeck(inDeck, entrySec)
 
+    _exec(outDeck, inDeck, cfg)
+
     activeDeckRef.current = inDeck
     setState(s => ({ ...s, activeDeck: inDeck, isPlaying: true }))
-  }, [getCtx, _startDeck])
+  }, [getCtx, _ensureGraph, _startDeck, _exec])
+
+  // ── public: stop ─────────────────────────────────────────────────────
 
   const stop = useCallback(() => {
     if (crossfadeTimerRef.current) clearTimeout(crossfadeTimerRef.current)
     stopTicker()
-    ;(['A', 'B'] as ActiveDeck[]).forEach(d => {
-      try { decks.current[d].source?.stop() } catch { /* ignore */ }
-      decks.current[d].source = null
-      if (decks.current[d].gain) {
-        decks.current[d].gain!.gain.cancelScheduledValues(0)
-        decks.current[d].gain!.gain.setValueAtTime(1, 0)
-      }
+    ;(['A', 'B'] as ActiveDeck[]).forEach(dk => {
+      try { decks.current[dk].source?.stop() } catch { /* ignore */ }
+      decks.current[dk].source = null
+      _reset(dk)
+      const g = decks.current[dk].masterGain
+      if (g) { g.gain.cancelScheduledValues(0); g.gain.setValueAtTime(1, 0) }
     })
     setState(s => ({ ...s, isPlaying: false, elapsed: 0 }))
-  }, [stopTicker])
+  }, [stopTicker, _reset])
+
+  // ── public: resume ───────────────────────────────────────────────────
 
   const resume = useCallback(async () => {
     const ctx = ctxRef.current
-    if (ctx && ctx.state === 'suspended') {
-      await ctx.resume()
-    }
+    if (ctx && ctx.state === 'suspended') await ctx.resume()
   }, [])
+
+  // ── cleanup ──────────────────────────────────────────────────────────
 
   useEffect(() => {
     return () => {
@@ -289,14 +442,5 @@ export function useAudioEngine(): AudioEngine {
     }
   }, [stopTicker])
 
-  return {
-    state,
-    loadDeck,
-    play,
-    crossfadeNow,
-    rescheduleTransition,
-    stop,
-    resume,
-    getElapsed,
-  }
+  return { state, loadDeck, play, crossfadeNow, rescheduleTransition, stop, resume, getElapsed }
 }
