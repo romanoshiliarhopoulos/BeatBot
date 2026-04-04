@@ -61,7 +61,6 @@ export default function Transport({
   nextTrack,
   elapsed,
   exitSec,
-  transitionType,
   suggestedType,
   transitionOverride,
   onTransitionOverrideChange,

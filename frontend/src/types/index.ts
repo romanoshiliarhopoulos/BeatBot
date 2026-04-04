@@ -50,6 +50,8 @@ export interface QueueItem {
   track_id: string
   entry_sec: number
   exit_sec: number
+  source?: 'dj' | 'request'
+  requested_by?: string | null
 }
 
 export interface QueueState {
@@ -103,6 +105,61 @@ export interface TransitionConfig {
   delayFeedback?: number | null
   silenceSec?: number | null
 }
+
+// ── Live Sessions ────────────────────────────────────────────────────────
+
+export interface CreateSessionResponse {
+  session_id: string
+  session_url: string
+  created_at: number
+}
+
+export interface SessionState {
+  session_id: string
+  active: boolean
+  dj_connected: boolean
+  current_track_id: string | null
+  current_index: number
+  elapsed_sec: number
+  queue: QueueItem[]
+  created_at: number
+}
+
+export interface SessionSummary {
+  session_id: string
+  created_at: number
+  ended_at: number | null
+  duration_sec: number
+  peak_listeners: number
+  unique_listeners: number
+  total_requests: number
+  accepted_requests: number
+  denied_requests: number
+  tracks_played: string[]
+}
+
+export interface SongRequest {
+  request_id: string
+  session_id: string
+  display_name: string
+  source: 'library' | 'youtube'
+  track_id: string | null
+  youtube_url: string | null
+  query: string
+  status: 'pending' | 'accepted' | 'denied'
+  created_at: number
+}
+
+// ── Audience WS events ──────────────────────────────────────────────────
+
+export type AudienceWsEvent =
+  | { type: 'session.state'; session_id: string; active: boolean; dj_connected: boolean; current_track_id: string | null; current_index: number; elapsed_sec: number; queue: QueueItem[]; listener_count: number }
+  | { type: 'session.end' }
+  | { type: 'session.dj_status'; connected: boolean; listener_count: number }
+  | { type: 'playback.tick'; track_id: string; elapsed_sec: number; duration_sec: number; progress: number; next_transition_in_sec: number; current_index?: number }
+  | { type: 'queue.update'; queue: QueueItem[]; current_index?: number }
+  | { type: 'request.resolved'; request_id: string; status: string }
+  | { type: 'pong' }
 
 // Local UI state
 export type PlaybackStatus = 'idle' | 'loading' | 'playing' | 'crossfading' | 'paused'

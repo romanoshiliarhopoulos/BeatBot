@@ -1,8 +1,8 @@
 /**
  * DJEnvironment — the core DJ application.
  * This is the content of the original App.tsx, augmented with:
- *   • auth user display + sign-out
- *   • folder indicator + link back to onboarding
+ * • auth user display + sign-out
+ * • folder indicator + link back to onboarding
  */
 import {
   useState,
@@ -43,6 +43,7 @@ import { useMixes } from "../contexts/MixContext";
 import Deck from "../components/Deck";
 import Queue from "../components/Queue";
 import Transport from "../components/Transport";
+import SessionPanel from "../components/SessionPanel";
 import Library from "./Library";
 import Discover from "./Discover.tsx";
 
@@ -126,15 +127,14 @@ const adaptCuesToPlayLength = (
   const duration = Math.max(1, bars[bars.length - 1] - bars[0]);
   const { minBody, maxBody } = getPlayWindow(duration, profile);
 
-  // Derive cue candidates from probability distributions (frontend-owned logic).
   const entryScoresWeighted = scoreIn.map((s, i) => {
-    const pos = i / Math.max(bars.length - 1, 1); // 0..1
+    const pos = i / Math.max(bars.length - 1, 1);
     const earlyWeight = pos <= 0.55 ? 1 : Math.max(0, 1 - (pos - 0.55) / 0.25);
     return s * earlyWeight;
   });
 
   const exitScoresWeighted = scoreOutRaw.map((s, i) => {
-    const pos = i / Math.max(bars.length - 1, 1); // 0..1
+    const pos = i / Math.max(bars.length - 1, 1);
     const lateWeight = Math.max(0, Math.min(1, 1 - (pos - 0.72) / 0.16));
     return s * lateWeight;
   });
@@ -147,7 +147,6 @@ const adaptCuesToPlayLength = (
     return { entrySec: bars[baseEntry], exitSec: bars[baseExit] };
   }
 
-  // Pass 1: keep entry fixed and move exit only (live UX feels stable).
   let bestExit = -1;
   let bestExitScore = -Infinity;
   for (let i = 0; i < bars.length; i += 1) {
@@ -163,7 +162,6 @@ const adaptCuesToPlayLength = (
     return { entrySec: bars[baseEntry], exitSec: bars[bestExit] };
   }
 
-  // Pass 2: limited entry movement if absolutely needed.
   const shift = Math.max(4, Math.floor(bars.length * 0.08));
   const lo = Math.max(0, baseEntry - shift);
   const hi = Math.min(bars.length - 1, baseEntry + shift);
@@ -216,16 +214,12 @@ export default function DJEnvironment() {
 
   const [selectedMixId, setSelectedMixId] = useState<string | null>(null);
 
-  // ── server data ──────────────────────────────────────────────────────────
   const { data: library = [] } = useQuery<TrackMeta[]>({
     queryKey: ["tracks"],
     queryFn: fetchTracks,
     staleTime: 60_000,
   });
 
-  // Only show tracks that have been processed by the CLI (server library).
-  // The folder scan (tracks) is used solely for resolving local audio files —
-  // unprocessed local files should not appear in the queue.
   const combinedLibrary = library;
 
   const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -260,10 +254,8 @@ export default function DJEnvironment() {
   useEffect(() => {
     if (queue.length > 0 && queueCursor >= queue.length)
       setQueueCursor(Math.max(0, queue.length - 1));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queue.length]);
+  }, [queue.length, queueCursor, setQueueCursor]);
 
-  // ── deck state ───────────────────────────────────────────────────────────
   const [deckA, setDeckA] = useState<DeckInfo>(emptyDeck);
   const [deckB, setDeckB] = useState<DeckInfo>(emptyDeck);
   const [activeDeck, setActiveDeck] = useState<ActiveDeck>("A");
@@ -273,7 +265,6 @@ export default function DJEnvironment() {
   const [deckALoading, setDeckALoading] = useState(false);
   const [deckBLoading, setDeckBLoading] = useState(false);
 
-  // Revoke stale object URLs to avoid browser memory growth in long sessions.
   useEffect(() => {
     return () => {
       if (deckA.audioSrc) URL.revokeObjectURL(deckA.audioSrc);
@@ -286,27 +277,25 @@ export default function DJEnvironment() {
     };
   }, [deckB.audioSrc]);
 
-  // ── playback ─────────────────────────────────────────────────────────────
   const [fadeSecs, setFadeSecs] = useState(7);
   const [playLength, setPlayLength] = useState<PlayLengthProfile>("medium");
   const [playbackStatus, setPlaybackStatus] = useState<PlaybackStatus>("idle");
   const didAutoXfade = useRef(false);
 
   const engine = useAudioEngine();
-  const { isConnected, lastEvent } = useWebSocket();
+  const { isConnected, lastEvent, sendMessage: wsSendMessage } = useWebSocket();
 
-  // ── derived ───────────────────────────────────────────────────────────────
   const nowDeck = activeDeck === "A" ? deckA : deckB;
   const nowSet = activeDeck === "A" ? setDeckA : setDeckB;
   const nextDeck = activeDeck === "A" ? deckB : deckA;
   const nextSet = activeDeck === "A" ? setDeckB : setDeckA;
 
-  // ── transition strategy ────────────────────────────────────────────────
-  // "auto" means use the backend suggestion; anything else is a user override.
-  const [transitionOverride, setTransitionOverride] = useState<TransitionConfig["type"] | "auto">("auto");
-  const [suggestedConfig, setSuggestedConfig] = useState<TransitionConfig | null>(null);
+  const [transitionOverride, setTransitionOverride] = useState<
+    TransitionConfig["type"] | "auto"
+  >("auto");
+  const [suggestedConfig, setSuggestedConfig] =
+    useState<TransitionConfig | null>(null);
 
-  // Fetch the backend's transition suggestion whenever the deck pair changes.
   useEffect(() => {
     if (!nowDeck.track || !nextDeck.track) {
       setSuggestedConfig(null);
@@ -320,24 +309,30 @@ export default function DJEnvironment() {
       nextDeck.entry_sec,
       fadeSecs,
     )
-      .then((cfg) => { if (!cancelled) setSuggestedConfig(cfg); })
+      .then((cfg) => {
+        if (!cancelled) setSuggestedConfig(cfg);
+      })
       .catch((err) => {
         console.warn("[DJEnvironment] transition suggest failed:", err);
         if (!cancelled) setSuggestedConfig(null);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [
-    nowDeck.track?.track_id, nowDeck.exit_sec,
-    nextDeck.track?.track_id, nextDeck.entry_sec,
+    nowDeck.track?.track_id,
+    nowDeck.exit_sec,
+    nextDeck.track?.track_id,
+    nextDeck.entry_sec,
     fadeSecs,
   ]);
 
-  const transitionConfig: TransitionConfig | null =
-    !suggestedConfig ? null
-    : transitionOverride === "auto" ? suggestedConfig
-    : { ...suggestedConfig, type: transitionOverride };
+  const transitionConfig: TransitionConfig | null = !suggestedConfig
+    ? null
+    : transitionOverride === "auto"
+      ? suggestedConfig
+      : { ...suggestedConfig, type: transitionOverride };
 
-  // ── load a track into a deck slot ─────────────────────────────────────────
   const loadDeckSlot = useCallback(
     async (slot: ActiveDeck, item: QueueItem, lib: TrackMeta[]) => {
       const setLoading = slot === "A" ? setDeckALoading : setDeckBLoading;
@@ -345,18 +340,20 @@ export default function DJEnvironment() {
 
       setLoading(true);
       try {
-        // Get the local File if the user has a linked folder
         const file = await getFileByTrackId(item.track_id);
+        
+        if (!file) {
+          console.warn(`[DJEnvironment] Audio file not found for track: ${item.track_id}`);
+          setLoading(false);
+          return;
+        }
 
-        // Load audio + fetch prediction (from Firestore cache via /predict) in parallel.
-        // If the track hasn't been processed by the CLI yet, /predict returns 404
-        // and we fall back to a zero-cue placeholder — the Onboarding panel
-        // explains how to run the CLI to populate the cache.
         const audioPromise = engine.loadDeck(
           slot,
           item.track_id,
-          file ?? undefined,
+          file,
         );
+
         const predPromise = predictCues(item.track_id);
 
         let pred = await Promise.all([audioPromise, predPromise])
@@ -366,50 +363,31 @@ export default function DJEnvironment() {
               `[DJEnvironment] predict fallback for ${item.track_id}:`,
               err,
             );
+            // Use backend-provided cues as fallback instead of zeros so
+            // auto-crossfade triggerAt = exit_sec - fadeSecs stays positive.
             return {
               track_id: item.track_id,
               num_bars: 0,
               bar_times: [] as number[],
               score_in: [] as number[],
               score_out: [] as number[],
-              entry_sec: 0,
-              exit_sec: 0,
+              entry_sec: item.entry_sec ?? 0,
+              exit_sec: item.exit_sec > 0 ? item.exit_sec : 180,
               method: "heuristic" as const,
             };
           });
 
-        const track = lib.find((t) => t.track_id === item.track_id) ?? null;
+        const track: TrackMeta = lib.find((t) => t.track_id === item.track_id) ?? {
+          track_id: item.track_id,
+          duration: (pred as import("../types").PredictResponse).exit_sec ?? 0,
+          tempo: 0,
+          key: null,
+          camelot: null,
+          num_bars: (pred as import("../types").PredictResponse).num_bars ?? 0,
+          has_cue_labels: false,
+          collection: 'custom',
+        };
         const p = pred as import("../types").PredictResponse;
-
-        // ── debug: dump everything we know about this track ──────────────
-        console.group(`🎵 [Deck ${slot}] ${item.track_id}`);
-        console.log("── TrackMeta (library) ──", track);
-        console.log("── PredictResponse ──", {
-          method: p.method,
-          model_version: (p as any).model_version,
-          num_bars: p.num_bars,
-          entry_sec: p.entry_sec,
-          exit_sec: p.exit_sec,
-        });
-        if (p.bar_times?.length) {
-          console.log("bar_times (first 10):", p.bar_times.slice(0, 10));
-        }
-        console.log("score_in  (first 20):", p.score_in?.slice(0, 20));
-        console.log("score_out (first 20):", p.score_out?.slice(0, 20));
-        if (p.energy) console.log("energy:", p.energy.slice(0, 20));
-        if (p.bass_energy)
-          console.log("bass_energy:", p.bass_energy.slice(0, 20));
-        if (p.high_energy)
-          console.log("high_energy:", p.high_energy.slice(0, 20));
-        if (p.mid_energy) console.log("mid_energy:", p.mid_energy.slice(0, 20));
-        if (p.beat_strength)
-          console.log("beat_strength:", p.beat_strength.slice(0, 20));
-        if (p.vocal_presence)
-          console.log("vocal_presence:", p.vocal_presence.slice(0, 20));
-        console.log("── full pred object ──", p);
-        console.groupEnd();
-        // ────────────────────────────────────────────────────────────────
-
         const adapted = adaptCuesToPlayLength(pred, playLength);
 
         setSlot({
@@ -417,18 +395,23 @@ export default function DJEnvironment() {
           prediction: pred,
           entry_sec: adapted.entrySec,
           exit_sec: adapted.exitSec,
-          audioSrc: file ? URL.createObjectURL(file) : undefined,
+          audioSrc: URL.createObjectURL(file),
         });
+        
+        // Only clear loading flag after audio has been successfully set up
+        setLoading(false);
       } catch (err) {
         console.error(`[DJEnvironment] loadDeckSlot ${slot}:`, err);
-      } finally {
         setLoading(false);
       }
     },
-    [engine, getFileByTrackId, playLength],
+    // Use engine.loadDeck (stable useCallback) rather than the whole engine
+    // object (recreated every 250 ms by the ticker) to prevent loadDeckSlot
+    // from being recreated on every tick, which in turn caused the
+    // auto-crossfade effect to re-register constantly and load decks twice.
+    [engine.loadDeck, getFileByTrackId, playLength],
   );
 
-  // Instantly adapt displayed cues when play length changes (no API wait).
   useEffect(() => {
     const adaptDeck = (setDeck: Dispatch<SetStateAction<DeckInfo>>) => {
       setDeck((current) => {
@@ -446,12 +429,10 @@ export default function DJEnvironment() {
     adaptDeck(setDeckB);
   }, [playLength]);
 
-  // ── load queue on mount ───────────────────────────────────────────────────
   useEffect(() => {
     fetchQueue().then((qs) => setQueue(qs.tracks));
   }, []);
 
-  // ── populate empty decks when queue / library ready ───────────────────────
   useEffect(() => {
     if (combinedLibrary.length === 0 && queue.length === 0) return;
     const cursor = queueCursorRef.current;
@@ -466,24 +447,52 @@ export default function DJEnvironment() {
       loadDeckSlot(active, nowItem, combinedLibrary);
     if (nextItem && !nextDeckInfo.track && !nextLoad)
       loadDeckSlot(active === "A" ? "B" : "A", nextItem, combinedLibrary);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queue, library]);
+  }, [queue, library, loadDeckSlot]); // Include loadDeckSlot if linting requires
 
-  // ── auto-crossfade ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!engine.state.isPlaying) return;
     const active = activeDeck === "A" ? deckA : deckB;
     const inactive = activeDeck === "A" ? deckB : deckA;
+    const nextLoad = activeDeck === "A" ? deckBLoading : deckALoading;
     const triggerAt = active.exit_sec - fadeSecs;
+    const timePastTrigger = engine.state.elapsed - triggerAt;
+    
     if (
       engine.state.elapsed >= triggerAt &&
       triggerAt > 0 &&
       !didAutoXfade.current
     ) {
+      // CRITICAL: Mark as executed IMMEDIATELY to prevent multiple fires from effect re-runs
       didAutoXfade.current = true;
+
+      // Guard: if next deck is still loading audio, wait before proceeding
+      if (nextLoad && timePastTrigger < 5) {
+        // Still loading and we're within grace period - wait and try again next tick
+        console.log('[DJEnvironment] Auto-transition blocked: next deck audio still loading', {
+          timePastTrigger: timePastTrigger.toFixed(2),
+        });
+        return;
+      }
+
+      if (nextLoad && timePastTrigger >= 5) {
+        console.warn('[DJEnvironment] Auto-transition timeout: next deck still loading', {
+          timePastTrigger: timePastTrigger.toFixed(2),
+          trackId: inactive.track?.id,
+          incomingDeckEngineSource: activeDeck === "A" ? engine.state.deckB?.source : engine.state.deckA?.source,
+          nextLoad,
+        });
+        // Do NOT proceed if audio still isn't loaded - just skip this transition
+        // and wait for the next trigger point or manual interaction
+        return;
+      }
+
       if (inactive.track) {
         setPlaybackStatus("crossfading");
-        engine.crossfadeNow(inactive.entry_sec, fadeSecs, transitionConfig ?? undefined);
+        engine.crossfadeNow(
+          inactive.entry_sec,
+          fadeSecs,
+          transitionConfig ?? undefined,
+        );
         const newActive: ActiveDeck = activeDeck === "A" ? "B" : "A";
         setActiveDeck(newActive);
         const newCursor = queueCursorRef.current + 1;
@@ -503,14 +512,39 @@ export default function DJEnvironment() {
         didAutoXfade.current = false;
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [engine.state.elapsed, engine.state.isPlaying]);
+  }, [
+    engine.state.elapsed,
+    engine.state.isPlaying,
+    activeDeck,
+    deckA,
+    deckB,
+    fadeSecs,
+    transitionConfig,
+    combinedLibrary,
+    loadDeckSlot,
+    setQueueCursor,
+    deckALoading,
+    deckBLoading,
+  ]);
 
-  // ── WebSocket events ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!lastEvent) return;
     if (lastEvent.type === "queue.updated") {
-      setQueue(lastEvent.tracks);
+      const newTracks = lastEvent.tracks;
+      setQueue(newTracks);
+
+      const cursor = queueCursorRef.current;
+      const nextItem = newTracks[cursor + 1];
+      const active = activeDeckRef.current;
+      const loadedNext = active === "A" ? deckB : deckA;
+      if (
+        nextItem &&
+        loadedNext.track &&
+        loadedNext.track.track_id !== nextItem.track_id
+      ) {
+        const inactiveSlot: ActiveDeck = active === "A" ? "B" : "A";
+        loadDeckSlot(inactiveSlot, nextItem, combinedLibrary);
+      }
     } else if (lastEvent.type === "cues.accepted") {
       const { track_id, cue_type, accepted_sec } = lastEvent;
       const update = (d: DeckInfo): DeckInfo => {
@@ -524,9 +558,19 @@ export default function DJEnvironment() {
       setDeckA(update);
       setDeckB(update);
     }
-  }, [lastEvent]);
+  }, [lastEvent, combinedLibrary, loadDeckSlot]);
 
-  // ── transport handlers ────────────────────────────────────────────────────
+  // ── FIX: AGGRESSIVE WEBSOCKET BROADCASTER ──
+  // This physically forces the DJ's local state out to the backend whenever it changes.
+  useEffect(() => {
+    if (!isConnected) return;
+    wsSendMessage({
+      type: "queue.update",
+      queue: queue,
+      current_index: queueCursor,
+    });
+  }, [queue, queueCursor, isConnected, wsSendMessage]);
+
   const handlePlay = useCallback(async () => {
     await engine.resume();
     if (nowDeck.track) {
@@ -545,7 +589,11 @@ export default function DJEnvironment() {
   const handleMixNow = useCallback(() => {
     if (!nextDeck.track) return;
     setPlaybackStatus("crossfading");
-    engine.crossfadeNow(nextDeck.entry_sec, fadeSecs, transitionConfig ?? undefined);
+    engine.crossfadeNow(
+      nextDeck.entry_sec,
+      fadeSecs,
+      transitionConfig ?? undefined,
+    );
     const newActive: ActiveDeck = activeDeck === "A" ? "B" : "A";
     setActiveDeck(newActive);
     const newCursor = queueCursorRef.current + 1;
@@ -559,9 +607,17 @@ export default function DJEnvironment() {
     didAutoXfade.current = false;
     const effectiveFade = transitionConfig?.fadeSecs ?? fadeSecs;
     setTimeout(() => setPlaybackStatus("playing"), effectiveFade * 1000);
-  }, [engine, nextDeck, activeDeck, fadeSecs, transitionConfig, library, loadDeckSlot]);
+  }, [
+    engine,
+    nextDeck,
+    activeDeck,
+    fadeSecs,
+    transitionConfig,
+    combinedLibrary,
+    loadDeckSlot,
+    setQueueCursor,
+  ]);
 
-  // ── queue handlers ────────────────────────────────────────────────────────
   const handleAdd = useCallback(async (trackId: string) => {
     const qs = await addToQueue([trackId]);
     setQueue(qs.tracks);
@@ -618,17 +674,20 @@ export default function DJEnvironment() {
     setQueueCursor(0);
     setDeckA(emptyDeck());
     setDeckB(emptyDeck());
-  }, []);
+  }, [setQueueCursor]);
 
-  const handleShuffle = useCallback(async (subset: TrackMeta[]) => {
-    await clearQueue();
-    setQueueCursor(0);
-    setDeckA(emptyDeck());
-    setDeckB(emptyDeck());
-    const shuffled = [...subset].sort(() => Math.random() - 0.5);
-    const qs = await addToQueue(shuffled.map((t) => t.track_id));
-    setQueue(qs.tracks);
-  }, []);
+  const handleShuffle = useCallback(
+    async (subset: TrackMeta[]) => {
+      await clearQueue();
+      setQueueCursor(0);
+      setDeckA(emptyDeck());
+      setDeckB(emptyDeck());
+      const shuffled = [...subset].sort(() => Math.random() - 0.5);
+      const qs = await addToQueue(shuffled.map((t) => t.track_id));
+      setQueue(qs.tracks);
+    },
+    [setQueueCursor],
+  );
 
   const handleSelectMix = useCallback(
     async (mixId: string | null) => {
@@ -645,13 +704,11 @@ export default function DJEnvironment() {
           return;
         }
       }
-      // null or empty mix — just leave queue empty
       setQueue([]);
     },
-    [mixes],
+    [mixes, setQueueCursor],
   );
 
-  // ── cue edit callbacks ────────────────────────────────────────────────────
   const handleNowCueUpdate = useCallback(
     (type: "entry" | "exit", sec: number) =>
       nowSet((d) => ({
@@ -671,7 +728,6 @@ export default function DJEnvironment() {
     [nextSet],
   );
 
-  // ── keyboard shortcuts ─────────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).tagName === "INPUT") return;
@@ -695,9 +751,8 @@ export default function DJEnvironment() {
   useEffect(() => {
     if (!engine.state.isPlaying && playbackStatus === "playing")
       setPlaybackStatus("idle");
-  }, [engine.state.isPlaying]);
+  }, [engine.state.isPlaying, playbackStatus]);
 
-  // Keep engine auto-fade schedule aligned with live cue edits / length changes.
   useEffect(() => {
     if (!engine.state.isPlaying) return;
     if (!nowDeck.track) return;
@@ -710,16 +765,13 @@ export default function DJEnvironment() {
     engine.rescheduleTransition,
   ]);
 
-  // ── UI view ───────────────────────────────────────────────────────────────
   const [view, setView] = useState<"dj" | "library" | "discover">("dj");
 
-  // ── render ─────────────────────────────────────────────────────────────────
   const nowLoading = activeDeck === "A" ? deckALoading : deckBLoading;
   const nextLoading = activeDeck === "A" ? deckBLoading : deckALoading;
 
   return (
     <div className="flex flex-col h-screen bg-[#07070f] text-white select-none">
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="flex items-center gap-3 px-6 py-3 border-b border-white/5 shrink-0">
         <span className="text-purple-400 text-lg font-bold tracking-tight">
           Beat<span className="text-white">Bot</span>
@@ -728,7 +780,6 @@ export default function DJEnvironment() {
           AI DJ
         </span>
 
-        {/* Tab nav */}
         <nav className="flex items-center gap-1 ml-4 p-0.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
           {(["dj", "library", "discover"] as const).map((v) => (
             <button
@@ -746,13 +797,10 @@ export default function DJEnvironment() {
         </nav>
 
         <div className="ml-auto flex items-center gap-3 text-xs">
-          {/* Folder indicator */}
           {folders.length === 0 ? (
             <button
               onClick={addFolder}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg
-                bg-amber-900/30 border border-amber-700/40 text-amber-400 text-[11px]
-                hover:bg-amber-800/40 transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-900/30 border border-amber-700/40 text-amber-400 text-[11px] hover:bg-amber-800/40 transition-colors"
               title="Link your local music folder so BeatBot can play audio"
             >
               <span>⚠</span>
@@ -761,8 +809,7 @@ export default function DJEnvironment() {
           ) : (
             <button
               onClick={addFolder}
-              className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px]
-                text-gray-600 hover:text-gray-400 transition-colors"
+              className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px] text-gray-600 hover:text-gray-400 transition-colors"
               title={`Linked to: ${folders[0].name} — click to change folder`}
             >
               <span className="text-green-500">●</span>
@@ -770,7 +817,6 @@ export default function DJEnvironment() {
             </button>
           )}
 
-          {/* User info + Sign out */}
           {user && (
             <div className="flex items-center gap-3">
               <span className="text-gray-700 truncate max-w-[120px]">
@@ -793,7 +839,6 @@ export default function DJEnvironment() {
         <Discover />
       ) : (
         <>
-          {/* ── Decks + Queue ───────────────────────────────────────────────────── */}
           <div className="flex flex-1 min-h-0 overflow-hidden">
             <div className="flex flex-col flex-1 p-3 min-w-0 min-h-0">
               <Deck
@@ -815,24 +860,31 @@ export default function DJEnvironment() {
               />
             </div>
 
-            <div className="flex flex-col w-80 shrink-0 p-3 min-h-0 border-l border-white/5">
-              <Queue
-                queue={queue}
-                currentIndex={queueCursor}
-                library={combinedLibrary}
-                mixes={mixes}
-                selectedMixId={selectedMixId}
-                onSelectMix={handleSelectMix}
-                onAdd={handleAdd}
-                onRemove={handleRemove}
-                onReorder={handleReorder}
-                onClear={handleClear}
-                onShuffle={handleShuffle}
-              />
+            <div className="flex flex-col w-80 shrink-0 p-3 min-h-0 border-l border-white/5 gap-3">
+              <div className="flex-1 min-h-0">
+                <Queue
+                  queue={queue}
+                  currentIndex={queueCursor}
+                  library={combinedLibrary}
+                  mixes={mixes}
+                  selectedMixId={selectedMixId}
+                  onSelectMix={handleSelectMix}
+                  onAdd={handleAdd}
+                  onRemove={handleRemove}
+                  onReorder={handleReorder}
+                  onClear={handleClear}
+                  onShuffle={handleShuffle}
+                />
+              </div>
+              <div className="h-64 shrink-0">
+                <SessionPanel
+                  lastWsEvent={lastEvent}
+                  sendWsMessage={wsSendMessage}
+                />
+              </div>
             </div>
           </div>
 
-          {/* ── Transport ───────────────────────────────────────────────────────── */}
           <div className="shrink-0">
             <Transport
               status={playbackStatus}

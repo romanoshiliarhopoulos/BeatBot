@@ -435,7 +435,7 @@ function MixGrid({
   uploadProgress: number | null;
   onAddLocal: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
-  console.log("[MixGrid] render — mixes count:", mixes.length, mixes);
+  //console.log("[MixGrid] render — mixes count:", mixes.length, mixes);
 
   const sortedMixes = [...mixes].sort((a, b) => b.createdAt - a.createdAt);
 

@@ -65,6 +65,8 @@ class QueueItem(BaseModel):
     track_id: str
     entry_sec: float
     exit_sec: float
+    source: Literal["dj", "request"] = "dj"
+    requested_by: Optional[str] = None
 
 
 class QueueState(BaseModel):
@@ -175,3 +177,55 @@ class WsError(BaseModel):
     code: str
     message: str
     recoverable: bool = True
+
+
+# ── Live Sessions ────────────────────────────────────────────────────────────
+
+class CreateSessionResponse(BaseModel):
+    session_id: str
+    session_url: str
+    created_at: float
+
+class SessionState(BaseModel):
+    session_id: str
+    active: bool
+    dj_connected: bool
+    current_track_id: Optional[str] = None
+    current_index: int = 0
+    elapsed_sec: float = 0.0
+    queue: List[QueueItem] = []
+    created_at: float = 0.0
+
+class SessionSummary(BaseModel):
+    session_id: str
+    created_at: float
+    ended_at: Optional[float] = None
+    duration_sec: float = 0.0
+    peak_listeners: int = 0
+    unique_listeners: int = 0
+    total_requests: int = 0
+    accepted_requests: int = 0
+    denied_requests: int = 0
+    tracks_played: List[str] = []
+
+class SongRequestCreate(BaseModel):
+    display_name: str
+    source: Literal["library", "youtube"]
+    track_id: Optional[str] = None
+    youtube_url: Optional[str] = None
+    query: str = ""
+
+class SongRequestResponse(BaseModel):
+    request_id: str
+    session_id: str
+    display_name: str
+    source: str
+    track_id: Optional[str] = None
+    youtube_url: Optional[str] = None
+    query: str = ""
+    status: str = "pending"
+    created_at: float = 0.0
+
+class ResolveRequestBody(BaseModel):
+    status: Literal["accepted", "denied"]
+    track_id: str | None = None  # provided by frontend after YouTube processing

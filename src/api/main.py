@@ -39,6 +39,7 @@ from api.state import app_state  # noqa: E402  (must come after sys.path tweak)
 from api.auth import _ensure_app as _ensure_firebase  # noqa: E402
 from api.routes import (         # noqa: E402
     cues,
+    live_session,
     mixes,
     predict,
     queue,
@@ -47,6 +48,7 @@ from api.routes import (         # noqa: E402
     transition,
     upload,
 )
+from api.session_state import session_store  # noqa: E402
 
 # ── logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -81,8 +83,11 @@ async def lifespan(app: FastAPI):
     else:
         log.warning("  ⚠  No model found — heuristic cue detection will be used.")
 
+    session_store.start_timeout_checker()
+
     yield  # server is live
 
+    session_store.stop_timeout_checker()
     log.info("Shutting down BeatBot API.")
 
 
@@ -133,6 +138,7 @@ app.include_router(upload.router,     tags=["Upload"])
 # via the File System Access API (no server-side audio streaming needed).
 app.include_router(transition.router, tags=["Playback"])
 app.include_router(session.router,    tags=["WebSocket"])
+app.include_router(live_session.router, tags=["Live Sessions"])
 
 
 @app.get("/", include_in_schema=False)
