@@ -59,6 +59,8 @@ class QueueEntry:
     track_id: str
     entry_sec: float
     exit_sec: float
+    source: Literal["dj", "request"] = "dj"
+    requested_by: Optional[str] = None
 
 
 @dataclass
@@ -395,7 +397,8 @@ class AppState:
         user_state = self.get_user_state(uid)
         return [
             {"position": i, "track_id": e.track_id,
-             "entry_sec": e.entry_sec, "exit_sec": e.exit_sec}
+             "entry_sec": e.entry_sec, "exit_sec": e.exit_sec,
+             "source": e.source, "requested_by": e.requested_by}
             for i, e in enumerate(user_state.queue)
         ]
 

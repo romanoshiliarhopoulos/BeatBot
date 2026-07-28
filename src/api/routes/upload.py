@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import re
 from pathlib import Path
@@ -15,7 +16,60 @@ import pickle
 
 from extractor.extractor import Extractor
 
+log = logging.getLogger("beatbot.upload")
+
 router = APIRouter()
+
+# ── YouTube proxy rotation ───────────────────────────────────────────────────
+# YOUTUBE_PROXIES env var: newline-separated list of host:port:user:pass
+
+import random
+
+def _get_proxy() -> str | None:
+    """Pick a random residential proxy from the configured list."""
+    raw = os.getenv("YOUTUBE_PROXIES", "")
+    if not raw:
+        return None
+    proxies = [p.strip() for p in raw.strip().splitlines() if p.strip()]
+    if not proxies:
+        return None
+    chosen = random.choice(proxies)
+    parts = chosen.split(":")
+    if len(parts) == 4:
+        host, port, user, passwd = parts
+        url = f"http://{user}:{passwd}@{host}:{port}"
+    else:
+        url = f"http://{chosen}"
+    log.info("Using YouTube proxy: %s:%s", parts[0], parts[1])
+    return url
+
+# ── YouTube cookies resolution ───────────────────────────────────────────────
+# Priority: YOUTUBE_COOKIES env var (Cloud Run) → local cookies.txt (dev)
+
+_COOKIES_PATH: str | None = None
+
+def _resolve_cookies() -> str | None:
+    """Write cookies from env var to a temp file, or use a local file."""
+    global _COOKIES_PATH
+    if _COOKIES_PATH is not None:
+        return _COOKIES_PATH
+
+    env_cookies = os.getenv("YOUTUBE_COOKIES")
+    if env_cookies:
+        tmp = Path("/tmp/yt_cookies.txt")
+        tmp.write_text(env_cookies)
+        _COOKIES_PATH = str(tmp)
+        log.info("Using YouTube cookies from YOUTUBE_COOKIES env var.")
+        return _COOKIES_PATH
+
+    local = Path("cookies.txt")
+    if local.exists():
+        _COOKIES_PATH = str(local.resolve())
+        log.info("Using YouTube cookies from local cookies.txt.")
+        return _COOKIES_PATH
+
+    log.warning("No YouTube cookies found — downloads may fail.")
+    return None
 
 def make_track_meta(t):
     _NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
@@ -81,85 +135,75 @@ async def upload_youtube(
     title: str = Form(...),
     uid: str = Depends(verify_token)
 ):
-    try:
-        import yt_dlp
-    except ImportError:
-        raise HTTPException(
-            status_code=503,
-            detail="YouTube download is not available: yt-dlp is not installed or not configured on this server."
-        )
-    
-    track_id = sanitize_track_id(title)
-    if not track_id:
-        track_id = sanitize_track_id(video_id)
-        
-    import uuid
     import shutil
-    req_id = uuid.uuid4().hex[:8]
-    out_dir = Path(f"/tmp/beatbot_yt_{req_id}")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{track_id}.mp3"
+    from tempfile import TemporaryDirectory
 
-    ydl_opts = {
-        "format":    "bestaudio[ext=m4a]/bestaudio/best",
-        "outtmpl":   str(out_dir / f"{track_id}.%(ext)s"),
-        "postprocessors": [{
-            "key":              "FFmpegExtractAudio",
-            "preferredcodec":   "mp3",
-            "preferredquality": "192",
-        }],
-        "quiet":            True,
-        "no_warnings":      True,
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["android", "web"]
+    track_id = sanitize_track_id(title)
+
+    try:
+        with TemporaryDirectory() as tmp_dir:
+            out_path = Path(tmp_dir) / f"{track_id}.mp3"
+
+            # Download audio from YouTube using yt-dlp with cookies
+            try:
+                import yt_dlp
+            except ImportError:
+                raise HTTPException(
+                    status_code=503,
+                    detail="YouTube download is not available: yt-dlp is not installed."
+                )
+
+            cookies_path = _resolve_cookies()
+            proxy_url = _get_proxy()
+
+            ydl_opts = {
+                "format": "bestaudio/best",
+                "postprocessors": [{
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "192",
+                }],
+                "quiet": False,
+                "no_warnings": False,
+                "outtmpl": str(out_path).replace(".mp3", ""),
             }
-        },
-    }
+            if cookies_path:
+                ydl_opts["cookies"] = cookies_path
+            if proxy_url:
+                ydl_opts["proxy"] = proxy_url
 
-    try:
-        url = f"https://www.youtube.com/watch?v={video_id}"
-        await asyncio.to_thread(lambda: yt_dlp.YoutubeDL(ydl_opts).download([url]))
-    except Exception as e:
-        import logging
-        logging.error(f"YouTube download failed: {e}")
-        shutil.rmtree(out_dir, ignore_errors=True)
-        raise HTTPException(status_code=500, detail="Failed to fetch audio from YouTube. The video might be restricted.")
+            try:
+                def _download():
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
 
-    try:
-        if not out_path.exists():
-            raise HTTPException(status_code=500, detail="Downloaded MP3 file was not found. Processing failed.")
+                await asyncio.to_thread(_download)
+            except Exception as e:
+                import logging
+                logging.error(f"YouTube download failed: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to download YouTube video: {str(e)}")
 
-        ex = Extractor(enable_vocal_separation=False)
-        track = await asyncio.to_thread(ex.extract, str(out_path), track_id=track_id)
-        
-        # Save to DB
-        set_features(uid, track_id, pickle.dumps(track))
-        set_library_track(uid, track_id, make_track_meta(track).model_dump())
-        
-        app_state.track_registry[track_id] = track
-        
-        # Return the mp3 file for download.
-        def cleanup_files():
-            shutil.rmtree(out_dir, ignore_errors=True)
-            
-        background_tasks.add_task(cleanup_files)
-        
-        return FileResponse(
-            out_path, 
-            media_type='audio/mpeg', 
-            headers={"Content-Disposition": f'attachment; filename="{track_id}.mp3"'}
-        )
+            if not out_path.exists():
+                raise HTTPException(status_code=500, detail="Downloaded MP3 file was not found. Processing failed.")
+
+            # Extract audio features
+            ex = Extractor(enable_vocal_separation=False)
+            track = await asyncio.to_thread(ex.extract, str(out_path), track_id=track_id)
+
+            # Save to DB
+            set_features(uid, track_id, pickle.dumps(track))
+            set_library_track(uid, track_id, make_track_meta(track).model_dump())
+
+            app_state.track_registry[track_id] = track
+
+            return make_track_meta(track).model_dump()
+
     except HTTPException:
-        import shutil
-        shutil.rmtree(out_dir, ignore_errors=True)
         raise
     except Exception as e:
         import traceback
         traceback.print_exc()
-        import shutil
-        shutil.rmtree(out_dir, ignore_errors=True)
-        raise HTTPException(status_code=500, detail="Extractor encountered an error processing the audio.")
+        raise HTTPException(status_code=500, detail="Failed to process YouTube upload.")
 
 @router.get("/search/youtube")
 async def search_youtube(q: str):

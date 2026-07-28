@@ -13,7 +13,7 @@ deploy:
 		--allow-unauthenticated \
 		--memory 1Gi \
 		--min-instances 0 \
-		--set-env-vars CORS_EXTRA_ORIGIN=https://beatbot-35280.web.app
+		--update-env-vars CORS_EXTRA_ORIGIN=https://beatbot-35280.web.app
 
 .PHONY: deploy
 

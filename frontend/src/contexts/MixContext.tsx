@@ -53,12 +53,12 @@ export function MixProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const { user, loading: authLoading } = useAuth();
 
-  console.log(
-    "[MixContext] auth state — user:",
-    user?.uid ?? null,
-    "authLoading:",
-    authLoading,
-  );
+  //console.log(
+  //  "[MixContext] auth state — user:",
+  //  user?.uid ?? null,
+  //  "authLoading:",
+  //  authLoading,
+  //);
 
   // Server state — only fetch once auth has resolved and user is signed in.
   const { data: serverMixes, isLoading } = useQuery<Mix[]>({
@@ -80,7 +80,7 @@ export function MixProvider({ children }: { children: ReactNode }) {
 
   // Sync local state whenever the server returns fresh data.
   useEffect(() => {
-    console.log("[MixContext] serverMixes changed:", serverMixes);
+    //console.log("[MixContext] serverMixes changed:", serverMixes);
     if (serverMixes !== undefined) {
       console.log(
         "[MixContext] seeding local mixes with",
@@ -94,7 +94,7 @@ export function MixProvider({ children }: { children: ReactNode }) {
   // Reset when user signs out or changes.
   useEffect(() => {
     if (!user) {
-      console.log("[MixContext] user signed out — clearing mixes");
+      //console.log("[MixContext] user signed out — clearing mixes");
       setMixes([]);
     }
   }, [user]);
@@ -118,7 +118,7 @@ export function MixProvider({ children }: { children: ReactNode }) {
       trackIds: [],
       createdAt: Date.now(),
     };
-    console.log("[MixContext] createMix optimistic add:", mix);
+    //console.log("[MixContext] createMix optimistic add:", mix);
     setMixes((prev) => [...prev, mix]);
     apiCreateMix(mix)
       .then((res) => console.log("[MixContext] createMix API success:", res))

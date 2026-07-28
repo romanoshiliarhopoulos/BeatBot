@@ -8,6 +8,10 @@ import type {
   QueueState,
   EarlyTransitionResponse,
   TransitionConfig,
+  CreateSessionResponse,
+  SessionState,
+  SessionSummary,
+  SongRequest,
 } from '../types'
 import { firebaseAuth } from '../lib/firebase'
 
@@ -174,16 +178,16 @@ export async function triggerEarlyTransition(
 // ── Mixes ─────────────────────────────────────────────────────────────────
 
 export async function fetchMixes(): Promise<Mix[]> {
-  console.log('[client] fetchMixes → GET /mixes')
+  //('[client] fetchMixes → GET /mixes')
   const { data } = await api.get<Mix[]>('/mixes')
-  console.log('[client] fetchMixes ← response:', data)
+  //console.log('[client] fetchMixes ← response:', data)
   return data
 }
 
 export async function apiCreateMix(mix: Mix): Promise<Mix> {
-  console.log('[client] apiCreateMix → POST /mixes', mix)
+  //console.log('[client] apiCreateMix → POST /mixes', mix)
   const { data } = await api.post<Mix>('/mixes', mix)
-  console.log('[client] apiCreateMix ← response:', data)
+  //console.log('[client] apiCreateMix ← response:', data)
   return data
 }
 
@@ -191,16 +195,16 @@ export async function apiUpdateMix(
   id: string,
   updates: Partial<Pick<Mix, 'name' | 'trackIds' | 'color'>>
 ): Promise<Mix> {
-  console.log('[client] apiUpdateMix → PUT /mixes/' + id, updates)
+  //console.log('[client] apiUpdateMix → PUT /mixes/' + id, updates)
   const { data } = await api.put<Mix>(`/mixes/${encodeURIComponent(id)}`, updates)
-  console.log('[client] apiUpdateMix ← response:', data)
+  //console.log('[client] apiUpdateMix ← response:', data)
   return data
 }
 
 export async function apiDeleteMix(id: string): Promise<void> {
-  console.log('[client] apiDeleteMix → DELETE /mixes/' + id)
+  //console.log('[client] apiDeleteMix → DELETE /mixes/' + id)
   await api.delete(`/mixes/${encodeURIComponent(id)}`)
-  console.log('[client] apiDeleteMix ← done')
+  //console.log('[client] apiDeleteMix ← done')
 }
 
 // ── Upload ─────────────────────────────────────────────────────────────────
@@ -233,5 +237,58 @@ export async function uploadLocal(file: File, onProgress?: (percent: number) => 
 
 export async function searchYoutube(q: string): Promise<any[]> {
   const { data } = await api.get<any[]>('/search/youtube', { params: { q } })
+  return data
+}
+
+// ── Live Sessions ─────────────────────────────────────────────────────
+
+export async function createSession(): Promise<CreateSessionResponse> {
+  const { data } = await api.post<CreateSessionResponse>('/sessions')
+  return data
+}
+
+export async function getActiveSession(): Promise<SessionState> {
+  const { data } = await api.get<SessionState>('/sessions/active')
+  return data
+}
+
+export async function endSession(sessionId: string): Promise<void> {
+  await api.delete(`/sessions/${encodeURIComponent(sessionId)}`)
+}
+
+export async function getSessionState(sessionId: string): Promise<SessionState> {
+  const { data } = await api.get<SessionState>(`/sessions/${encodeURIComponent(sessionId)}`)
+  return data
+}
+
+export async function getSessionHistory(): Promise<SessionSummary[]> {
+  const { data } = await api.get<SessionSummary[]>('/sessions/history')
+  return data
+}
+
+export async function getSessionRequests(sessionId: string): Promise<SongRequest[]> {
+  const { data } = await api.get<SongRequest[]>(`/sessions/${encodeURIComponent(sessionId)}/requests`)
+  return data
+}
+
+export async function resolveRequest(
+  sessionId: string,
+  requestId: string,
+  status: 'accepted' | 'denied',
+  track_id?: string,
+): Promise<void> {
+  await api.patch(`/sessions/${encodeURIComponent(sessionId)}/requests/${encodeURIComponent(requestId)}`, { status, track_id })
+}
+
+export async function searchSessionLibrary(sessionId: string, q: string): Promise<TrackMeta[]> {
+  const { data } = await api.get<TrackMeta[]>(`/sessions/${encodeURIComponent(sessionId)}/library`, { params: { q } })
+  return data
+}
+
+export async function submitSongRequest(
+  sessionId: string,
+  body: { display_name: string; source: 'library' | 'youtube'; track_id?: string; youtube_url?: string; query: string },
+): Promise<SongRequest> {
+  const { data } = await api.post<SongRequest>(`/sessions/${encodeURIComponent(sessionId)}/requests`, body)
   return data
 }

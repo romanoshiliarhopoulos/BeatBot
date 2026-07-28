@@ -1,6 +1,8 @@
-import { useAuth } from "./contexts/AuthContext";
-import Landing from "./pages/Landing";
-import DJEnvironment from "./pages/DJEnvironment";
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { useAuth } from './contexts/AuthContext'
+import Landing from './pages/Landing'
+import DJEnvironment from './pages/DJEnvironment'
+import AudienceView from './pages/AudienceView'
 
 function LoadingScreen() {
   return (
@@ -9,13 +11,25 @@ function LoadingScreen() {
         Beat<span className="text-white">Bot</span>
       </span>
     </div>
-  );
+  )
+}
+
+function DJApp() {
+  const { user, loading } = useAuth()
+  if (loading) return <LoadingScreen />
+  if (!user) return <Landing />
+  return <DJEnvironment />
 }
 
 export default function App() {
-  const { user, loading } = useAuth();
-
-  if (loading) return <LoadingScreen />;
-  if (!user) return <Landing />;
-  return <DJEnvironment />;
+  return (
+    <BrowserRouter>
+      <Routes>
+        {/* Audience view — no auth required */}
+        <Route path="/live/:sessionId" element={<AudienceView />} />
+        {/* Everything else — DJ app */}
+        <Route path="*" element={<DJApp />} />
+      </Routes>
+    </BrowserRouter>
+  )
 }

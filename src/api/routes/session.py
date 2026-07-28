@@ -13,6 +13,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
 
 from api.auth import verify_token
 from api.state import app_state
+from api.session_state import session_store
 from api.ws_manager import manager
 
 log = logging.getLogger("beatbot.ws.session")
@@ -66,14 +67,65 @@ async def ws_session(websocket: WebSocket, token: str = ""):
                     progress = min(elapsed / duration, 1.0) if duration > 0 else 0.0
                     transition_in = max(0.0, entry.exit_sec - elapsed)
 
-                    # Broadcast playback tick to all clients for this user
-                    await manager.broadcast_to_user(uid, {
+                    tick_data = {
                         "type":                   "playback.tick",
                         "track_id":               entry.track_id,
                         "elapsed_sec":            round(elapsed, 2),
                         "duration_sec":           round(duration, 2),
                         "progress":               round(progress, 4),
                         "next_transition_in_sec": round(transition_in, 2),
+                        "current_index":          ci,
+                    }
+
+                    # Broadcast playback tick to all clients for this user
+                    await manager.broadcast_to_user(uid, tick_data)
+
+                    # Also broadcast to audience if there's a live session
+                    live = session_store.get_active_session_for_dj(uid)
+                    if live:
+                        live.elapsed_sec = round(elapsed, 2)
+                        live.current_track_id = entry.track_id
+                        live.current_index = ci
+                        await session_store.audience_ws.broadcast(
+                            live.session_id, tick_data
+                        )
+
+            elif msg_type == "session.heartbeat":
+                # Forward heartbeat to session store
+                live = session_store.get_active_session_for_dj(uid)
+                if live:
+                    session_store.heartbeat(live.session_id)
+                    # Update session playback snapshot
+                    user_state = app_state.get_user_state(uid)
+                    live.current_index = user_state.current_index
+                    live.elapsed_sec = user_state.playback.elapsed_sec
+                    if 0 <= user_state.current_index < len(user_state.queue):
+                        live.current_track_id = user_state.queue[user_state.current_index].track_id
+                    # Broadcast listener count + dj status to audience
+                    count = session_store.audience_ws.listener_count(live.session_id)
+                    if count > live.analytics.peak_listeners:
+                        live.analytics.peak_listeners = count
+                    await session_store.audience_ws.broadcast(live.session_id, {
+                        "type": "session.dj_status",
+                        "connected": True,
+                        "listener_count": count,
+                    })
+
+            elif msg_type == "queue.update":
+                # DJ frontend is syncing queue + cursor state
+                current_index = int(data.get("current_index", 0))
+                user_state = app_state.get_user_state(uid)
+                user_state.current_index = current_index
+
+                live = session_store.get_active_session_for_dj(uid)
+                if live:
+                    live.current_index = current_index
+                    if 0 <= current_index < len(user_state.queue):
+                        live.current_track_id = user_state.queue[current_index].track_id
+                    await session_store.audience_ws.broadcast(live.session_id, {
+                        "type": "queue.update",
+                        "queue": app_state.queue_as_list(uid),
+                        "current_index": current_index,
                     })
 
             elif msg_type == "ping":

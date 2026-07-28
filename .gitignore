@@ -17,3 +17,6 @@ build/
 dist/
 *.pyc
 *.pytest_cache/
+# YouTube session cookies and proxies (secrets — never commit)
+cookies.txt
+Webshare*

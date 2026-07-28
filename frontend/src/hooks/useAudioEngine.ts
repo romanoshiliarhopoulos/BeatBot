@@ -120,6 +120,7 @@ export function useAudioEngine(): AudioEngine {
   const activeDeckRef = useRef<ActiveDeck>('A')
   const crossfadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const tickerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const transitionInProgressRef = useRef<{ endTime: number } | null>(null)
 
   const [state, setState] = useState<AudioEngineState>({
     isPlaying: false, activeDeck: 'A', elapsed: 0, loadingA: false, loadingB: false,
@@ -200,14 +201,29 @@ export function useAudioEngine(): AudioEngine {
     if (!ctx) return
     const d = decks.current[deck]
     const now = ctx.currentTime
-    const zero = (p: AudioParam | undefined) => {
-      if (!p) return; p.cancelScheduledValues(now); p.setValueAtTime(0, now)
+    
+    // Aggressively clear all scheduled parameter changes
+    const clearParam = (p: AudioParam | undefined) => {
+      if (!p) return
+      p.cancelScheduledValues(now)
+      p.setValueAtTime(0, now)
     }
-    zero(d.lowShelf?.gain); zero(d.peaking?.gain); zero(d.highShelf?.gain)
-    zero(d.delayFeedback?.gain); zero(d.delayWet?.gain)
+    
+    clearParam(d.lowShelf?.gain)
+    clearParam(d.peaking?.gain)
+    clearParam(d.highShelf?.gain)
+    clearParam(d.delayFeedback?.gain)
+    clearParam(d.delayWet?.gain)
+    
+    // Also clear frequency parameters
     if (d.sweepFilter) {
       d.sweepFilter.frequency.cancelScheduledValues(now)
       d.sweepFilter.frequency.setValueAtTime(20000, now)
+    }
+    
+    if (d.delayNode) {
+      d.delayNode.delayTime.cancelScheduledValues(now)
+      d.delayNode.delayTime.setValueAtTime(0.5, now)
     }
   }, [])
 
@@ -261,14 +277,45 @@ export function useAudioEngine(): AudioEngine {
     const i = decks.current[inDeck]
     const { type, curve, fadeSecs } = cfg
 
+    // Track transition end time for guard
+    transitionInProgressRef.current = { endTime: now + fadeSecs }
+
+    // Log transition data
+    const transitionData = {
+      timestamp: new Date().toISOString(),
+      transitionType: type,
+      durationSec: fadeSecs,
+      curveType: curve,
+      outgoingDeck: outDeck,
+      outgoingTrack: o.trackId,
+      incomingDeck: inDeck,
+      incomingTrack: i.trackId,
+      ctxTime: now,
+      ...cfg, // Include all config parameters (bassSwapAt, filterStartHz, delayTimeSec, etc.)
+    }
+    console.log('[AudioEngine] TRANSITION', transitionData)
+
     _reset(outDeck)
     _reset(inDeck)
 
-    switch (type) {
+    // If incoming deck has no source, this transition will break. Log a warning.
+    let effectiveType = type
+    if (!i.source) {
+      console.warn('[AudioEngine] TRANSITION_WARNING: Incoming deck has no source loaded. Will fade out current track only.', {
+        inDeck,
+        inTrack: i.trackId,
+        outDeck,
+        outTrack: o.trackId,
+      })
+      // Fall back to a simple fadeout on outgoing deck only
+      effectiveType = 'crossfade'
+    }
+
+    switch (effectiveType) {
       // ── EQ Bass Swap ─────────────────────────────────────────────────
       case 'eq_swap': {
         if (o.masterGain) scheduleFadeOut(o.masterGain.gain, now, fadeSecs, curve)
-        if (i.masterGain) scheduleFadeIn(i.masterGain.gain, now, fadeSecs, curve)
+        if (i.source && i.masterGain) scheduleFadeIn(i.masterGain.gain, now, fadeSecs, curve)
 
         // Smooth bass swap: ramp out/in over the middle third of the fade
         const swapCenter = fadeSecs * (cfg.bassSwapAt ?? 0.3)
@@ -280,7 +327,7 @@ export function useAudioEngine(): AudioEngine {
           o.lowShelf.gain.setValueAtTime(0, swapStart)
           o.lowShelf.gain.linearRampToValueAtTime(-30, swapEnd)
         }
-        if (i.lowShelf) {
+        if (i.source && i.lowShelf) {
           i.lowShelf.gain.setValueAtTime(-30, now)
           i.lowShelf.gain.setValueAtTime(-30, swapStart)
           i.lowShelf.gain.linearRampToValueAtTime(0, swapEnd)
@@ -291,7 +338,7 @@ export function useAudioEngine(): AudioEngine {
       // ── Filter Sweep ─────────────────────────────────────────────────
       case 'filter_sweep': {
         if (o.masterGain) scheduleFadeOut(o.masterGain.gain, now, fadeSecs, curve)
-        if (i.masterGain) scheduleFadeIn(i.masterGain.gain, now, fadeSecs, curve)
+        if (i.source && i.masterGain) scheduleFadeIn(i.masterGain.gain, now, fadeSecs, curve)
 
         if (o.sweepFilter) {
           o.sweepFilter.frequency.setValueAtTime(cfg.filterStartHz ?? 20000, now)
@@ -305,7 +352,7 @@ export function useAudioEngine(): AudioEngine {
       // ── Echo / Delay Fade-Out ────────────────────────────────────────
       case 'echo_out': {
         if (o.masterGain) scheduleFadeOut(o.masterGain.gain, now, fadeSecs, curve)
-        if (i.masterGain) scheduleFadeIn(i.masterGain.gain, now, fadeSecs, curve)
+        if (i.source && i.masterGain) scheduleFadeIn(i.masterGain.gain, now, fadeSecs, curve)
 
         if (o.delayNode) o.delayNode.delayTime.setValueAtTime(cfg.delayTimeSec ?? 0.5, now)
         if (o.delayFeedback) {
@@ -326,7 +373,7 @@ export function useAudioEngine(): AudioEngine {
       case 'crossfade':
       default: {
         if (o.masterGain) scheduleFadeOut(o.masterGain.gain, now, fadeSecs, curve, o.masterGain.gain.value)
-        if (i.masterGain) scheduleFadeIn(i.masterGain.gain, now, fadeSecs, curve)
+        if (i.source && i.masterGain) scheduleFadeIn(i.masterGain.gain, now, fadeSecs, curve)
         break
       }
     }
@@ -346,9 +393,32 @@ export function useAudioEngine(): AudioEngine {
     const elapsed = (ctx.currentTime - d.startedAtCtxTime) + d.startedAtOffset
     const remainMs = Math.max(0, (exitSec - elapsed) * 1000)
 
+    // Skip if transition is already past its exit time
+    if (remainMs === 0) {
+      console.warn('[AudioEngine] TRANSITION_SKIPPED: Exit time already passed', {
+        timestamp: new Date().toISOString(),
+        exitSec,
+        elapsed,
+        fadeSecs,
+      })
+      transitionInProgressRef.current = null
+      return
+    }
+
+    console.log('[AudioEngine] TRANSITION_RESCHEDULED', {
+      timestamp: new Date().toISOString(),
+      exitSec,
+      fadeSecs,
+      elapsed,
+      remainingMs: remainMs,
+      activeDeck: deck,
+      trackId: d.trackId,
+    })
+
     crossfadeTimerRef.current = setTimeout(() => {
       const g = decks.current[deck].masterGain
       if (!g) return
+      transitionInProgressRef.current = null // Clear guard when auto-fade completes
       scheduleFadeOut(g.gain, ctx.currentTime, fadeSecs, 'equal_power', g.gain.value)
     }, remainMs)
   }, [state.isPlaying])
@@ -389,18 +459,28 @@ export function useAudioEngine(): AudioEngine {
     fadeSecs: number,
     transition?: TransitionConfig,
   ) => {
-    const ctx = getCtx()
+    const outDeck = activeDeckRef.current
+    const inDeck: ActiveDeck = outDeck === 'A' ? 'B' : 'A'
+
+    const cfg: TransitionConfig = transition ?? { type: 'crossfade', curve: 'equal_power', fadeSecs }
+
+    console.log('[AudioEngine] CROSSFADE_INITIATED', {
+      timestamp: new Date().toISOString(),
+      entrySec,
+      fadeSecs,
+      outgoingDeck: outDeck,
+      incomingDeck: inDeck,
+      transitionType: cfg.type,
+      curveType: cfg.curve,
+    })
+
     if (crossfadeTimerRef.current) {
       clearTimeout(crossfadeTimerRef.current)
       crossfadeTimerRef.current = null
     }
 
-    const outDeck = activeDeckRef.current
-    const inDeck: ActiveDeck = outDeck === 'A' ? 'B' : 'A'
     _ensureGraph(outDeck)
     _ensureGraph(inDeck)
-
-    const cfg: TransitionConfig = transition ?? { type: 'crossfade', curve: 'equal_power', fadeSecs }
 
     _startDeck(inDeck, entrySec)
 
@@ -414,6 +494,7 @@ export function useAudioEngine(): AudioEngine {
 
   const stop = useCallback(() => {
     if (crossfadeTimerRef.current) clearTimeout(crossfadeTimerRef.current)
+    transitionInProgressRef.current = null
     stopTicker()
     ;(['A', 'B'] as ActiveDeck[]).forEach(dk => {
       try { decks.current[dk].source?.stop() } catch { /* ignore */ }
@@ -436,6 +517,7 @@ export function useAudioEngine(): AudioEngine {
 
   useEffect(() => {
     return () => {
+      transitionInProgressRef.current = null
       stopTicker()
       if (crossfadeTimerRef.current) clearTimeout(crossfadeTimerRef.current)
       ctxRef.current?.close().catch(() => {})

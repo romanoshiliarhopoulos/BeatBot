@@ -100,7 +100,7 @@ export default function Discover() {
 
       setIsSearching(true);
       try {
-        console.log(`Searching for: ${q}`);
+        //console.log(`Searching for: ${q}`);
         const res = await searchYoutube(q);
         console.log("Search response:", res);
 
@@ -112,7 +112,7 @@ export default function Discover() {
           thumbnail: `https://i.ytimg.com/vi/${r.video_id}/mqdefault.jpg`,
           url: r.url,
         }));
-        console.log("Mapped results:", mapped);
+        //console.log("Mapped results:", mapped);
         setResults(mapped);
       } catch (err) {
         console.error(err);
