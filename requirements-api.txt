@@ -10,5 +10,5 @@ uvicorn[standard]>=0.30.0,<1.0.0
 firebase-admin>=6.5.0,<7.0.0
 python-multipart
 librosa
-yt-dlp
+yt-dlp>=2024.11.0
 tqdm

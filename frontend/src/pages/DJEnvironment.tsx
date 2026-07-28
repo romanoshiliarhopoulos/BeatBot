@@ -341,18 +341,16 @@ export default function DJEnvironment() {
       setLoading(true);
       try {
         const file = await getFileByTrackId(item.track_id);
-        
+
         if (!file) {
-          console.warn(`[DJEnvironment] Audio file not found for track: ${item.track_id}`);
+          console.warn(
+            `[DJEnvironment] Audio file not found for track: ${item.track_id}`,
+          );
           setLoading(false);
           return;
         }
 
-        const audioPromise = engine.loadDeck(
-          slot,
-          item.track_id,
-          file,
-        );
+        const audioPromise = engine.loadDeck(slot, item.track_id, file);
 
         const predPromise = predictCues(item.track_id);
 
@@ -377,7 +375,9 @@ export default function DJEnvironment() {
             };
           });
 
-        const track: TrackMeta = lib.find((t) => t.track_id === item.track_id) ?? {
+        const track: TrackMeta = lib.find(
+          (t) => t.track_id === item.track_id,
+        ) ?? {
           track_id: item.track_id,
           duration: (pred as import("../types").PredictResponse).exit_sec ?? 0,
           tempo: 0,
@@ -385,9 +385,8 @@ export default function DJEnvironment() {
           camelot: null,
           num_bars: (pred as import("../types").PredictResponse).num_bars ?? 0,
           has_cue_labels: false,
-          collection: 'custom',
+          collection: "custom",
         };
-        const p = pred as import("../types").PredictResponse;
         const adapted = adaptCuesToPlayLength(pred, playLength);
 
         setSlot({
@@ -397,7 +396,7 @@ export default function DJEnvironment() {
           exit_sec: adapted.exitSec,
           audioSrc: URL.createObjectURL(file),
         });
-        
+
         // Only clear loading flag after audio has been successfully set up
         setLoading(false);
       } catch (err) {
@@ -456,7 +455,7 @@ export default function DJEnvironment() {
     const nextLoad = activeDeck === "A" ? deckBLoading : deckALoading;
     const triggerAt = active.exit_sec - fadeSecs;
     const timePastTrigger = engine.state.elapsed - triggerAt;
-    
+
     if (
       engine.state.elapsed >= triggerAt &&
       triggerAt > 0 &&
@@ -468,19 +467,26 @@ export default function DJEnvironment() {
       // Guard: if next deck is still loading audio, wait before proceeding
       if (nextLoad && timePastTrigger < 5) {
         // Still loading and we're within grace period - wait and try again next tick
-        console.log('[DJEnvironment] Auto-transition blocked: next deck audio still loading', {
-          timePastTrigger: timePastTrigger.toFixed(2),
-        });
+        console.log(
+          "[DJEnvironment] Auto-transition blocked: next deck audio still loading",
+          {
+            timePastTrigger: timePastTrigger.toFixed(2),
+          },
+        );
         return;
       }
 
       if (nextLoad && timePastTrigger >= 5) {
-        console.warn('[DJEnvironment] Auto-transition timeout: next deck still loading', {
-          timePastTrigger: timePastTrigger.toFixed(2),
-          trackId: inactive.track?.id,
-          incomingDeckEngineSource: activeDeck === "A" ? engine.state.deckB?.source : engine.state.deckA?.source,
-          nextLoad,
-        });
+        const incomingDeck = activeDeck === "A" ? deckB : deckA;
+        console.warn(
+          "[DJEnvironment] Auto-transition timeout: next deck still loading",
+          {
+            timePastTrigger: timePastTrigger.toFixed(2),
+            trackId: inactive.track?.track_id,
+            incomingDeckAvailable: !!incomingDeck.track,
+            nextLoad,
+          },
+        );
         // Do NOT proceed if audio still isn't loaded - just skip this transition
         // and wait for the next trigger point or manual interaction
         return;

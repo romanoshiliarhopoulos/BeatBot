@@ -459,8 +459,6 @@ export function useAudioEngine(): AudioEngine {
     fadeSecs: number,
     transition?: TransitionConfig,
   ) => {
-    const ctx = getCtx()
-    const now = ctx.currentTime
     const outDeck = activeDeckRef.current
     const inDeck: ActiveDeck = outDeck === 'A' ? 'B' : 'A'
 

@@ -208,7 +208,7 @@ export default function AudienceView() {
 
   return (
     <div className="h-[100dvh] bg-[#07070f] text-white flex flex-col max-w-[480px] mx-auto overflow-hidden">
-      <header className="shrink-0 px-4 py-3 border-b border-white/5 flex items-center justify-between">
+      <header className="shrink-0 px-4 py-3 bg-[#07070f] border-b border-white/5 flex items-center justify-between">
         <span className="text-purple-400 text-base font-bold tracking-tight">
           Beat<span className="text-white">Bot</span>
           <span className="text-[10px] text-red-400 font-medium ml-2 align-middle">
